@@ -21,6 +21,7 @@ INSTALLED_APPS = [
     'image_uploader_widget',
     'adminsortable2',
     'catalog',
+    'users'
 ]
 
 MIDDLEWARE = [
