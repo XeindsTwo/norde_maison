@@ -22,10 +22,20 @@ class CategoryListView(generics.ListAPIView):
         if gender:
             qs = qs.filter(gender=gender)
         if is_material is not None:
-            if is_material.lower() in ('1', 'true', 'yes'):
+            val = is_material.lower()
+            if val in ('1', 'true', 'yes'):
                 qs = qs.filter(is_material=True)
-            if is_material.lower() in ('0', 'false', 'no'):
+            elif val in ('0', 'false', 'no'):
                 qs = qs.filter(is_material=False)
+
+        is_material_param = self.request.query_params.get('is_material')
+        if is_material_param is not None:
+            val = is_material_param.lower()
+            if val in ('0', 'false', 'no'):
+                qs = qs.filter(subcategories__isnull=False).distinct()
+        else:
+            pass
+
         return qs
 
 
