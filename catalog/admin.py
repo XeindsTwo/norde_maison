@@ -2,54 +2,59 @@ from django import forms
 from django.contrib import admin
 from django.db import models
 
-from adminsortable2.admin import SortableInlineAdminMixin, SortableAdminBase
+from adminsortable2.admin import SortableInlineAdminMixin, SortableAdminBase, SortableAdminMixin
 from image_uploader_widget.widgets import ImageUploaderWidget
 
 from .models import Category, SubCategory, ProductImage, ProductVariant, Product
 
 
 class ImageWidgetMixin:
-    """
-    Единый красивый виджет для всех ImageField (cover_image, main_image и т.п.).
-    """
     formfield_overrides = {
         models.ImageField: {'widget': ImageUploaderWidget},
     }
 
 
 @admin.register(Category)
-class CategoryAdmin(ImageWidgetMixin, admin.ModelAdmin):
-    list_display = ('name', 'gender', 'is_material', 'order')
-    list_filter = ('gender', 'is_material')
+class CategoryAdmin(SortableAdminMixin, ImageWidgetMixin, admin.ModelAdmin):
+    list_display = ('order', 'name', 'gender')
+    list_editable = ()
+    list_filter = ('gender',)
     search_fields = ('name',)
-    ordering = ('order', 'name')
+    sortable = 'order'
+    change_list_template = 'admin/catalog/category/change_list.html'
 
 
 @admin.register(SubCategory)
-class SubCategoryAdmin(ImageWidgetMixin, admin.ModelAdmin):
-    list_display = ('name', 'category', 'size_model', 'show_on_main', 'order')
-    list_filter = ('category__gender', 'category', 'size_model', 'show_on_main')
-    search_fields = ('name',)
+class SubCategoryAdmin(SortableAdminMixin, ImageWidgetMixin, admin.ModelAdmin):
+    list_display = ('show_on_main', 'name', 'category', 'is_material', 'size_model')
+    list_filter = ('show_on_main', 'category__gender', 'category', 'is_material', 'size_model')
+    list_display_links = ('name',)
+    search_fields = ('name', 'description')
     ordering = ('order', 'name')
 
-    def get_fields(self, request, obj=None):
-        fields = (
-            'category',
-            'name',
-            'size_model',
-            'cover_image',
-            'show_on_main',
-            'order',
-        )
-        return fields
+    sortable = 'order'
+    exclude = ('order',)
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'category',
+                'name',
+                'description',
+            )
+        }),
+        ('Отображение и логика', {
+            'fields': (
+                'show_on_main',
+                'is_material',
+                'size_model',
+                'cover_image',
+            )
+        }),
+    )
 
 
 class ProductImageInline(SortableInlineAdminMixin, admin.TabularInline):
-    """
-    Инлайн для фотографий товара:
-    - превью (preview_image)
-    - drag&drop сортировка по полю order (SortableInlineAdminMixin)
-    """
     model = ProductImage
     fields = ['image', 'preview_image']
     readonly_fields = ['preview_image']
@@ -68,8 +73,7 @@ class ProductAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        from .models import SubCategory  # избежать циклического импорта
-
+        from .models import SubCategory
         self.fields['subcategory'].queryset = SubCategory.objects.select_related('category').order_by(
             'category__gender',
             'order',
@@ -96,11 +100,10 @@ class ProductAdmin(SortableAdminBase, ImageWidgetMixin, admin.ModelAdmin):
         'subcategory__category__gender',
         'subcategory__category',
         'subcategory',
-        'material',
         'is_visible',
     )
 
-    search_fields = ('name', 'description')
+    search_fields = ('name', 'description', 'material')
 
     inlines = [ProductVariantInline, ProductImageInline]
 
@@ -116,14 +119,17 @@ class ProductAdmin(SortableAdminBase, ImageWidgetMixin, admin.ModelAdmin):
 
     def price_rub(self, obj):
         return f'{obj.price} ₽'
+
     price_rub.short_description = 'Цена'
     price_rub.admin_order_field = 'price'
 
     def created_short(self, obj):
         return obj.created_at.strftime('%d.%m.%Y')
+
     created_short.short_description = 'Создан'
     created_short.admin_order_field = 'created_at'
 
     def colors_preview(self, obj):
         return obj.colors_preview()
+
     colors_preview.short_description = 'Цвета'

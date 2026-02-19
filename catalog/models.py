@@ -39,24 +39,12 @@ class Category(models.Model):
 
     name = models.CharField('Название категории', max_length=200)
     gender = models.CharField('Пол', max_length=1, choices=Gender.choices)
-    is_material = models.BooleanField(
-        'Является материалом',
-        default=False,
-        help_text='Отметь, если это категория материалов (Хлопок, Шерсть и т.п.)'
-    )
     order = models.PositiveIntegerField('Порядок вывода', default=1, help_text='Порядок вывода в меню')
 
     class Meta:
-        ordering = ['gender', 'is_material', 'order', 'name']
+        ordering = ['order', 'gender', 'name']
         verbose_name = 'категорию'
         verbose_name_plural = 'Категории'
-
-    def save(self, *args, **kwargs):
-        if self.pk is None:
-            qs = Category.objects.filter(gender=self.gender, is_material=self.is_material)
-            last = qs.order_by('-order').first()
-            self.order = (last.order + 1) if last else 1
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.name} ({self.get_gender_display()})'
@@ -92,19 +80,23 @@ class SubCategory(models.Model):
         default=False,
         help_text='Показывать на главной (для выбора 4-х подкатегорий)',
     )
+    is_material = models.BooleanField(
+        'Является материалом',
+        default=False,
+        help_text='Отметь, если эта подкатегория — раздел материалов',
+    )
+    description = models.TextField(
+        'Описание подкатегории',
+        blank=True,
+        default='',
+        help_text='Краткое описание (Футболки, блузки, комплекты и т.п.)',
+    )
     order = models.PositiveIntegerField('Порядок вывода', default=1, help_text='Порядок вывода')
 
     class Meta:
         ordering = ['order', 'name']
         verbose_name = 'подкатегорию'
         verbose_name_plural = 'Подкатегории'
-
-    def save(self, *args, **kwargs):
-        if self.pk is None:
-            qs = SubCategory.objects.filter(category__gender=self.category.gender)
-            last = qs.order_by('-order').first()
-            self.order = (last.order + 1) if last else 1
-        super().save(*args, **kwargs)
 
     def delete(self, *args, **kwargs):
         if self.cover_image:
@@ -123,15 +115,12 @@ class Product(models.Model):
         on_delete=models.CASCADE,
         related_name='products',
     )
-    material = models.ForeignKey(
-        Category,
-        verbose_name='Материал',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=False,
-        limit_choices_to={'is_material': True},
-        related_name='material_products',
-        help_text='Материал из категорий-материалов',
+    material = models.CharField(
+        'Материал',
+        max_length=200,
+        blank=True,
+        default='',
+        help_text='Например: Хлопок, Лен, Шерсть мериноса',
     )
     name = models.CharField('Название товара', max_length=300)
     description = models.TextField('Описание', blank=True)
@@ -139,7 +128,7 @@ class Product(models.Model):
         'Цена',
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(0)],  # неотрицательная цена
+        validators=[MinValueValidator(0)],
     )
     is_visible = models.BooleanField('Доступность', default=True)
     main_image = models.ImageField(
@@ -255,7 +244,7 @@ class ProductVariant(models.Model):
     stock = models.PositiveIntegerField(
         'Остаток на складе',
         default=0,
-        validators=[MinValueValidator(0)],  # неотрицательный остаток
+        validators=[MinValueValidator(0)],
     )
 
     class Meta:
@@ -265,7 +254,6 @@ class ProductVariant(models.Model):
 
     def clean(self):
         super().clean()
-        # валидация размера по модели размеров подкатегории
         size_model = self.product.subcategory.size_model
         if size_model == SubCategory.SizeModel.UNI and self.size != ProductVariant.Sizes.UNI:
             raise ValidationError({'size': 'Для этой подкатегории допускается только размер UNI.'})

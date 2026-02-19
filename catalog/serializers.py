@@ -12,7 +12,7 @@ from .models import (
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ('id', 'name', 'gender', 'is_material', 'order')
+        fields = ('id', 'name', 'gender', 'order')
 
 
 class SubCategorySerializer(serializers.ModelSerializer):
@@ -26,6 +26,8 @@ class SubCategorySerializer(serializers.ModelSerializer):
             'size_model',
             'cover_image',
             'show_on_main',
+            'is_material',
+            'description',
             'order',
             'category',
         )
@@ -46,7 +48,6 @@ class ProductVariantSerializer(serializers.ModelSerializer):
 class ProductListSerializer(serializers.ModelSerializer):
     main_image = serializers.ImageField()
     subcategory = serializers.PrimaryKeyRelatedField(read_only=True)
-    material = CategorySerializer(read_only=True)
 
     class Meta:
         model = Product
@@ -65,7 +66,6 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
     subcategory = SubCategorySerializer(read_only=True)
-    material = CategorySerializer(read_only=True)
 
     class Meta:
         model = Product

@@ -10,33 +10,30 @@ from .serializers import (
 
 
 class CategoryListView(generics.ListAPIView):
-    queryset = Category.objects.all()
+    """
+    Список категорий с фильтрацией по полу и по материалам.
+    - gender=M/F
+    - is_material=true/false
+    Если для выбранного фильтра нет подкатегорий, категория не возвращается.
+    """
     serializer_class = CategorySerializer
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = Category.objects.all()
         gender = self.request.query_params.get('gender')
         is_material = self.request.query_params.get('is_material')
 
-        if gender:
+        if gender in ('M', 'F'):
             qs = qs.filter(gender=gender)
+
         if is_material is not None:
-            val = is_material.lower()
-            if val in ('1', 'true', 'yes'):
-                qs = qs.filter(is_material=True)
-            elif val in ('0', 'false', 'no'):
-                qs = qs.filter(is_material=False)
+            val = is_material.lower() in ('1', 'true', 'yes')
+            # оставляем только категории, у которых есть подкатегории с нужным is_material
+            qs = qs.filter(subcategories__is_material=val)
+            qs = qs.distinct()
 
-        is_material_param = self.request.query_params.get('is_material')
-        if is_material_param is not None:
-            val = is_material_param.lower()
-            if val in ('0', 'false', 'no'):
-                qs = qs.filter(subcategories__isnull=False).distinct()
-        else:
-            pass
-
-        return qs
+        return qs.order_by('order', 'name')
 
 
 class SubCategoryListView(generics.ListAPIView):
@@ -48,12 +45,22 @@ class SubCategoryListView(generics.ListAPIView):
         qs = super().get_queryset()
         category_id = self.request.query_params.get('category')
         show_on_main = self.request.query_params.get('show_on_main')
+        gender = self.request.query_params.get('gender')
 
         if category_id:
             qs = qs.filter(category_id=category_id)
         if show_on_main is not None:
             if show_on_main.lower() in ('1', 'true', 'yes'):
                 qs = qs.filter(show_on_main=True)
+        if gender:
+            qs = qs.filter(category__gender=gender)
+
+        # фильтруем материалы только если category не Материалы
+        if category_id:
+            cat = Category.objects.filter(id=category_id).first()
+            if cat and cat.name != 'Материалы':
+                qs = qs.filter(is_material=False)
+
         return qs
 
 
