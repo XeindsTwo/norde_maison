@@ -248,6 +248,7 @@ class ProductVariant(models.Model):
     )
 
     class Meta:
+        ordering = ['color_hex', 'id']
         unique_together = ('product', 'color_name', 'size')
         verbose_name = 'Вариант товара'
         verbose_name_plural = 'Варианты товара'
