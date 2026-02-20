@@ -1,0 +1,5 @@
+.form-row.field-cover_image label,
+.form-row.field-main_image label {
+    pointer-events: none;
+    cursor: pointer;
+}

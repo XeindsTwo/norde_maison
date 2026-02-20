@@ -16,27 +16,22 @@ class SubCategoryAdminForm(forms.ModelForm):
         model = SubCategory
         fields = "__all__"
 
+    class Media:
+        css = {
+            'all': ('admin/custom_admin.css',)
+        }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        qs = SubCategory.objects.select_related('category').order_by(
-            'category__gender', 'order', 'name'
-        )
+        categories = Category.objects.all().order_by('gender', 'order', 'name')
 
         grouped_choices = []
 
         for gender, label in [('F', 'Женские'), ('M', 'Мужские')]:
             items = [
-                (sc.id, f"{sc.name} — {sc.category.name}")
-                for sc in qs.filter(category__gender=gender, is_material=False)
-            ]
-            if items:
-                grouped_choices.append((label, items))
-
-        for gender, label in [('F', 'Женские материалы'), ('M', 'Мужские материалы')]:
-            items = [
-                (sc.id, f"{sc.name} — {sc.category.name}")
-                for sc in qs.filter(category__gender=gender, is_material=True)
+                (cat.id, cat.name)
+                for cat in categories.filter(gender=gender)
             ]
             if items:
                 grouped_choices.append((label, items))
@@ -56,10 +51,64 @@ class CategoryAdmin(SortableAdminMixin, admin.ModelAdmin):
 @admin.register(SubCategory)
 class SubCategoryAdmin(SortableAdminMixin, admin.ModelAdmin):
     form = SubCategoryAdminForm
-    list_display = ('name', 'category', 'is_material', 'show_on_main', 'order')
-    list_filter = ('category__gender', 'category', 'is_material', 'show_on_main')
+
+    list_display = (
+        'image_preview',
+        'name',
+        'category',
+        'is_material',
+        'show_on_main',
+        'order',
+    )
+    list_filter = (
+        'category__gender',
+        'category',
+        'is_material',
+        'show_on_main'
+    )
     search_fields = ('name', 'category__name')
     ordering = ('order',)
+    list_display_links = ('name',)
+    fields = (
+        'image_preview_large',
+        'cover_image',
+        'name',
+        'category',
+        'description',
+        'is_material',
+        'show_on_main',
+        'order',
+    )
+
+    readonly_fields = ('image_preview_large',)
+
+    formfield_overrides = {
+        models.ImageField: {
+            'widget': ImageUploaderWidget(attrs={'show_preview': True})
+        },
+    }
+
+    def image_preview(self, obj):
+        if obj.cover_image:
+            return mark_safe(
+                f'<img src="{obj.cover_image.url}" '
+                f'style="height:100px; width:80px; border-radius:8px; object-fit:cover;" />'
+            )
+        return "—"
+
+    image_preview.short_description = "Превью"
+
+    def image_preview_large(self, obj):
+        if obj and obj.cover_image:
+            return mark_safe(
+                f'<div style="margin-bottom:15px;">'
+                f'<img src="{obj.cover_image.url}" '
+                f'style="max-height:220px; border-radius:12px; box-shadow:0 4px 12px rgba(0,0,0,0.15);" />'
+                f'</div>'
+            )
+        return "Сохраните объект, чтобы увидеть превью"
+
+    image_preview_large.short_description = "Текущее изображение"
 
 
 class ImageWidgetMixin:
@@ -107,6 +156,11 @@ class ProductAdminForm(forms.ModelForm):
         model = Product
         fields = "__all__"
 
+    class Media:
+        css = {
+            'all': ('admin/custom_admin.css',)
+        }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -153,7 +207,7 @@ class ProductAdmin(ImageWidgetMixin, admin.ModelAdmin):
 
     def main_preview(self, obj):
         if obj.main_image:
-            return mark_safe(f'<img src="{obj.main_image.url}" style="max-height: 50px;">')
+            return mark_safe(f'<img src="{obj.main_image.url}" style="height:100px; width:80px; border-radius:8px; object-fit:cover;">')
         return "-"
 
     main_preview.short_description = "Главное фото"

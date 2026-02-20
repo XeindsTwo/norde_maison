@@ -1,5 +1,4 @@
 from rest_framework import serializers
-
 from .models import (
     Category,
     SubCategory,
@@ -66,6 +65,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     images = ProductImageSerializer(many=True, read_only=True)
     variants = ProductVariantSerializer(many=True, read_only=True)
     subcategory = SubCategorySerializer(read_only=True)
+    similar_products = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -81,4 +81,11 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'material',
             'images',
             'variants',
+            'similar_products',
         )
+
+    def get_similar_products(self, obj):
+        qs = Product.objects.filter(
+            subcategory=obj.subcategory
+        ).exclude(id=obj.id)[:4]
+        return ProductListSerializer(qs, many=True, context=self.context).data
