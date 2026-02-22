@@ -12,6 +12,7 @@ venv/
 
 # Django
 media/
+media_seed/
 
 # VS Code / PyCharm
 .vscode/

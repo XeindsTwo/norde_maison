@@ -1,6 +1,8 @@
+from django.db.models import Prefetch, Count, Q
 from rest_framework import generics, permissions
-from django.db.models import Q
-from .models import Category, SubCategory, Product
+from rest_framework.pagination import PageNumberPagination
+
+from .models import Category, SubCategory, Product, ProductImage, ProductVariant
 from .serializers import (
     CategorySerializer,
     SubCategorySerializer,
@@ -9,15 +11,21 @@ from .serializers import (
 )
 
 
+class ProductPagination(PageNumberPagination):
+    page_size = 16
+
+
 class CategoryListView(generics.ListAPIView):
-    """Список категорий с фильтрацией по полу и по материалам"""
     serializer_class = CategorySerializer
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
         qs = Category.objects.all()
-        gender = self.request.query_params.get('gender')
-        is_material = self.request.query_params.get('is_material')
+
+        params = self.request.query_params
+
+        gender = params.get('gender')
+        is_material = params.get('is_material')
 
         if gender in ('M', 'F'):
             qs = qs.filter(gender=gender)
@@ -30,24 +38,52 @@ class CategoryListView(generics.ListAPIView):
 
 
 class SubCategoryListView(generics.ListAPIView):
-    """Список подкатегорий с фильтрацией"""
     serializer_class = SubCategorySerializer
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        qs = SubCategory.objects.select_related('category').all()
-        category_id = self.request.query_params.get('category')
-        show_on_main = self.request.query_params.get('show_on_main')
-        gender = self.request.query_params.get('gender')
+        qs = SubCategory.objects.select_related(
+            'category'
+        ).prefetch_related(
+            Prefetch(
+                'products',
+                queryset=Product.objects.filter(
+                    is_visible=True
+                ).prefetch_related(
+                    Prefetch(
+                        'images',
+                        queryset=ProductImage.objects.order_by('order')
+                    ),
+                    Prefetch(
+                        'variants',
+                        queryset=ProductVariant.objects.only(
+                            'id',
+                            'product_id',
+                            'color_name',
+                            'color_hex',
+                            'size',
+                            'stock'
+                        )
+                    )
+                )
+            )
+        )
+
+        params = self.request.query_params
+
+        category_id = params.get('category')
+        show_on_main = params.get('show_on_main')
+        gender = params.get('gender')
 
         if category_id:
             qs = qs.filter(category_id=category_id)
+
         if show_on_main and show_on_main.lower() in ('1', 'true', 'yes'):
             qs = qs.filter(show_on_main=True)
-        if gender:
+
+        if gender in ('M', 'F'):
             qs = qs.filter(category__gender=gender)
 
-        # фильтруем материалы только если категория не Материалы
         if category_id:
             cat = Category.objects.filter(id=category_id).first()
             if cat and cat.name != 'Материалы':
@@ -57,57 +93,122 @@ class SubCategoryListView(generics.ListAPIView):
 
 
 class ProductListView(generics.ListAPIView):
-    """Список товаров с фильтрами"""
     serializer_class = ProductListSerializer
     permission_classes = [permissions.AllowAny]
+    pagination_class = ProductPagination
+
+    SORT_MAP = {
+        "default": "-created_at",
+        "price_asc": "price",
+        "price_desc": "-price",
+        "newest": "-created_at",
+    }
 
     def get_queryset(self):
-        qs = Product.objects.select_related(
-            'subcategory', 'subcategory__category'
-        ).prefetch_related('images', 'variants')
+        params = self.request.query_params
 
-        subcategory_id = self.request.query_params.get('subcategory')
-        category_id = self.request.query_params.get('category')
-        gender = self.request.query_params.get('gender')
-        visible = self.request.query_params.get('visible')
-        min_price = self.request.query_params.get('min_price')
-        max_price = self.request.query_params.get('max_price')
-        size = self.request.query_params.get('size')
-        color = self.request.query_params.get('color')
+        qs = Product.objects.filter(
+            is_visible=True
+        ).select_related(
+            "subcategory",
+            "subcategory__category"
+        ).prefetch_related(
+            Prefetch(
+                "images",
+                queryset=ProductImage.objects.order_by("order")
+            ),
+            Prefetch(
+                "variants",
+                queryset=ProductVariant.objects.only(
+                    "id",
+                    "product_id",
+                    "color_name",
+                    "color_hex",
+                    "size",
+                    "stock"
+                )
+            )
+        )
+
+        subcategory_id = params.get("subcategory")
+        gender = params.get("gender")
+
+        size_filters = params.getlist("size")
+        color_filters = params.getlist("color")
+
+        price_min = params.get("min_price")
+        price_max = params.get("max_price")
+
+        sort = params.get("sort", "default")
 
         if subcategory_id:
             qs = qs.filter(subcategory_id=subcategory_id)
-        if category_id:
-            qs = qs.filter(subcategory__category_id=category_id)
-        if gender:
-            qs = qs.filter(subcategory__category__gender=gender)
-        if visible and visible.lower() in ('1', 'true', 'yes'):
-            qs = qs.filter(is_visible=True)
-        if min_price:
-            qs = qs.filter(price__gte=min_price)
-        if max_price:
-            qs = qs.filter(price__lte=max_price)
-        if size:
-            qs = qs.filter(variants__size=size)
-        if color:
-            qs = qs.filter(variants__color_name=color)
 
-        return qs.distinct()
+        if gender in ("M", "F"):
+            qs = qs.filter(subcategory__category__gender=gender)
+
+        if size_filters:
+            qs = qs.filter(variants__size__in=size_filters)
+
+        if color_filters:
+            qs = qs.filter(variants__color_hex__in=color_filters)
+
+        if price_min:
+            qs = qs.filter(price__gte=price_min)
+
+        if price_max:
+            qs = qs.filter(price__lte=price_max)
+
+        order_field = self.SORT_MAP.get(sort, "-created_at")
+
+        qs = qs.order_by(order_field).distinct()
+
+        return qs
 
 
 class ProductDetailView(generics.RetrieveAPIView):
-    """Детальная карточка товара + подборка похожих товаров"""
     serializer_class = ProductDetailSerializer
     permission_classes = [permissions.AllowAny]
+
     queryset = Product.objects.select_related(
-        'subcategory', 'subcategory__category'
-    ).prefetch_related('images', 'variants')
+        'subcategory',
+        'subcategory__category'
+    ).prefetch_related(
+        Prefetch(
+            'images',
+            queryset=ProductImage.objects.order_by('order')
+        ),
+        Prefetch(
+            'variants',
+            queryset=ProductVariant.objects.only(
+                'id',
+                'product_id',
+                'color_name',
+                'color_hex',
+                'size',
+                'stock'
+            )
+        )
+    )
 
     def get_serializer_context(self):
-        context = super().get_serializer_context()
-        obj = self.get_object()
-        related = Product.objects.filter(
-            subcategory=obj.subcategory
-        ).exclude(id=obj.id)[:4]
-        context['related_products'] = related
-        return context
+        return {"request": self.request}
+
+
+class SubCategoryDetailView(generics.RetrieveAPIView):
+    serializer_class = SubCategorySerializer
+    permission_classes = [permissions.AllowAny]
+
+    queryset = SubCategory.objects.select_related(
+        'category'
+    ).prefetch_related(
+        Prefetch(
+            'products',
+            queryset=Product.objects.filter(
+                is_visible=True
+            ).prefetch_related(
+                'images',
+                'variants'
+            )
+        )
+    )

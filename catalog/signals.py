@@ -9,7 +9,7 @@ def safe_delete_file(file_field):
         try:
             os.remove(file_field.path)
         except Exception:
-            pass  # на проде можно логировать исключение
+            pass
 
 # --- Продукты ---
 @receiver(post_delete, sender=Product)
