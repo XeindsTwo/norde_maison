@@ -196,33 +196,67 @@ except admin.sites.NotRegistered:
 @admin.register(Product)
 class ProductAdmin(ImageWidgetMixin, admin.ModelAdmin):
     form = ProductAdminForm
+
     list_display = (
-        'is_visible', 'name', 'subcategory', 'material', 'price_rub', 'created_short', 'colors_preview', 'main_preview'
+        'is_visible',
+        'name',
+        'subcategory',
+        'material',
+        'price_rub_display',
+        'created_short',
+        'colors_preview',
+        'main_preview'
     )
+
     list_display_links = ('name',)
-    list_filter = ('subcategory__category__gender', 'subcategory__category', 'subcategory', 'is_visible')
+
+    list_filter = (
+        'subcategory__category__gender',
+        'subcategory__category',
+        'subcategory',
+        'is_visible'
+    )
+
     search_fields = ('name', 'description', 'material')
+
     inlines = [ProductVariantInline, ProductImageInline]
-    fields = ('is_visible', 'subcategory', 'material', 'name', 'description', 'price', 'main_image')
+
+    fields = (
+        'is_visible',
+        'subcategory',
+        'material',
+        'name',
+        'price_rub',
+        'price_kzt',
+        'price_byn',
+        'main_image',
+        'description',
+    )
 
     def main_preview(self, obj):
         if obj.main_image:
-            return mark_safe(f'<img src="{obj.main_image.url}" style="height:100px; width:80px; border-radius:8px; object-fit:cover;">')
+            return mark_safe(
+                f'<img src="{obj.main_image.url}" '
+                f'style="height:100px;width:80px;border-radius:8px;object-fit:cover;">'
+            )
         return "-"
 
     main_preview.short_description = "Главное фото"
 
-    def price_rub(self, obj):
-        return f"{obj.price} ₽"
 
-    price_rub.short_description = "Цена"
-    price_rub.admin_order_field = "price"
+    def price_rub_display(self, obj):
+        return f"{obj.price_rub} ₽" if obj.price_rub is not None else "—"
+
+    price_rub_display.short_description = "RUB"
+    price_rub_display.admin_order_field = "price_rub"
+
 
     def created_short(self, obj):
         return obj.created_at.strftime('%d.%m.%Y')
 
     created_short.short_description = "Создан"
     created_short.admin_order_field = "created_at"
+
 
     def colors_preview(self, obj):
         return obj.colors_preview()

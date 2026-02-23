@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'tinymce',
     'colorfield',
     'corsheaders',
     'image_uploader_widget',
@@ -71,6 +72,21 @@ DATABASES = {
     }
 }
 
+TINYMCE_DEFAULT_CONFIG = {
+    "height": 420,
+    "width": "100%",
+    "menubar": False,
+    "plugins": "lists",
+    "toolbar": "undo redo | blocks | bold italic | bullist numlist",
+    "valid_elements": "p,h3,strong,em,ul,ol,li",
+    "block_formats": "Paragraph=p; Заголовок=h3",
+    "paste_as_text": True,
+    "paste_block_drop": True,
+    "invalid_elements": "a",
+    "skin": "oxide-dark",
+    "content_css": "dark",
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -111,6 +127,7 @@ STATIC_URL = '/static/'
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"

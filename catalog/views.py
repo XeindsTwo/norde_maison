@@ -1,6 +1,7 @@
 from django.db.models import Prefetch, Count, Q
 from rest_framework import generics, permissions
 from rest_framework.pagination import PageNumberPagination
+from django.db.models import Exists, OuterRef, Prefetch
 
 from .models import Category, SubCategory, Product, ProductImage, ProductVariant
 from .serializers import (
@@ -99,71 +100,86 @@ class ProductListView(generics.ListAPIView):
 
     SORT_MAP = {
         "default": "-created_at",
-        "price_asc": "price",
-        "price_desc": "-price",
+        "price_asc": "price_rub",
+        "price_desc": "-price_rub",
         "newest": "-created_at",
     }
 
     def get_queryset(self):
         params = self.request.query_params
 
-        qs = Product.objects.filter(
-            is_visible=True
-        ).select_related(
-            "subcategory",
-            "subcategory__category"
-        ).prefetch_related(
-            Prefetch(
-                "images",
-                queryset=ProductImage.objects.order_by("order")
-            ),
-            Prefetch(
-                "variants",
-                queryset=ProductVariant.objects.only(
-                    "id",
-                    "product_id",
-                    "color_name",
-                    "color_hex",
-                    "size",
-                    "stock"
-                )
-            )
-        )
+        qs = Product.objects.filter(is_visible=True)
 
         subcategory_id = params.get("subcategory")
-        gender = params.get("gender")
-
         size_filters = params.getlist("size")
         color_filters = params.getlist("color")
 
+        currency = params.get("currency", "rub")
         price_min = params.get("min_price")
         price_max = params.get("max_price")
 
-        sort = params.get("sort", "default")
+        price_field_map = {
+            "rub": "price_rub",
+            "kzt": "price_kzt",
+            "byn": "price_byn",
+        }
+
+        price_field = price_field_map.get(currency, "price_rub")
 
         if subcategory_id:
             qs = qs.filter(subcategory_id=subcategory_id)
-
-        if gender in ("M", "F"):
-            qs = qs.filter(subcategory__category__gender=gender)
 
         if size_filters:
             qs = qs.filter(variants__size__in=size_filters)
 
         if color_filters:
-            qs = qs.filter(variants__color_hex__in=color_filters)
+            qs = qs.filter(variants__color_name__in=color_filters)
 
         if price_min:
-            qs = qs.filter(price__gte=price_min)
+            qs = qs.filter(**{f"{price_field}__gte": price_min})
 
         if price_max:
-            qs = qs.filter(price__lte=price_max)
+            qs = qs.filter(**{f"{price_field}__lte": price_max})
 
+        sort = params.get("sort", "default")
         order_field = self.SORT_MAP.get(sort, "-created_at")
 
-        qs = qs.order_by(order_field).distinct()
+        return qs.select_related(
+            "subcategory",
+            "subcategory__category"
+        ).prefetch_related(
+            "images",
+            "variants"
+        ).distinct().order_by(order_field)
 
-        return qs
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+
+        page = self.paginate_queryset(queryset)
+
+        serializer = self.get_serializer(page, many=True)
+
+        variants_qs = ProductVariant.objects.filter(product__in=queryset)
+
+        sizes = variants_qs.values_list(
+            "size",
+            flat=True
+        ).order_by("size").distinct()
+
+        colors = variants_qs.values(
+            "color_name",
+            "color_hex"
+        ).order_by("color_name").distinct()
+
+        filters = {
+            "sizes": list(sizes),
+            "colors": list(colors)
+        }
+
+        response = self.get_paginated_response(serializer.data)
+        response.data["filters"] = filters
+
+        return response
 
 
 class ProductDetailView(generics.RetrieveAPIView):

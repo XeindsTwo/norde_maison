@@ -6,6 +6,7 @@ from django.core.validators import MinValueValidator
 from colorfield.fields import ColorField
 from django.core.exceptions import ValidationError
 from django.utils.html import format_html, mark_safe
+from tinymce.models import HTMLField
 
 
 def product_main_image_path(instance, filename):
@@ -123,12 +124,24 @@ class Product(models.Model):
         help_text='Например: Хлопок, Лен, Шерсть мериноса',
     )
     name = models.CharField('Название товара', max_length=300)
-    description = models.TextField('Описание', blank=True)
-    price = models.DecimalField(
-        'Цена',
+    description = HTMLField(verbose_name="Описание", blank=True)
+    price_rub = models.DecimalField(
+        'Цена (RUB)',
         max_digits=10,
         decimal_places=2,
-        validators=[MinValueValidator(0)],
+        default=0
+    )
+    price_kzt = models.DecimalField(
+        'Цена (KZT)',
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
+    price_byn = models.DecimalField(
+        'Цена (BYN)',
+        max_digits=10,
+        decimal_places=2,
+        default=0
     )
     is_visible = models.BooleanField('Доступность', default=True)
     main_image = models.ImageField(
