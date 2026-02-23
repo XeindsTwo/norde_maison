@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Ошибка ссылки</title>
+  {% load static %}
+  <link rel="stylesheet" href="{% static 'css/email_pages.css' %}">
+</head>
+
+<body>
+<div class="container">
+  <div class="card">
+    <div class="title">
+      Ссылка недействительна
+    </div>
+    <div class="text">
+      Ссылка подтверждения email не найдена или устарела.
+      Пожалуйста, зарегистрируйтесь снова или запросите новую ссылку.
+    </div>
+    <a href="/" class="button">
+      На главную
+    </a>
+  </div>
+</div>
+</body>
+</html>

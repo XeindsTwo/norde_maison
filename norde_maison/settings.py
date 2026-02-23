@@ -117,6 +117,19 @@ CORS_ALLOWED_ORIGINS = [
     'http://127.0.0.1:3000',
 ]
 
+SITE_URL = "http://127.0.0.1:8000"
+
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+EMAIL_HOST = "smtp.yandex.com"
+EMAIL_PORT = 465
+EMAIL_USE_SSL = True
+
+EMAIL_HOST_USER = "alexygarnov@yandex.ru"
+EMAIL_HOST_PASSWORD = "tttglfubsolxieup"
+
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
 LANGUAGE_CODE = 'ru-ru'
 TIME_ZONE = 'UTC'
 
