@@ -54,16 +54,34 @@ class LoginView(APIView):
 
     def post(self, request):
 
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"detail": "Неверные данные"},
+                status=400
+            )
+
         user = authenticate(
-            username=request.data.get("username"),
-            password=request.data.get("password")
+            request,
+            username=user.username,
+            password=password
         )
 
         if not user:
-            return Response({"detail": "Неверные данные"}, status=400)
+            return Response(
+                {"detail": "Неверные данные"},
+                status=400
+            )
 
         if not user.is_active:
-            return Response({"detail": "Email не подтверждён"}, status=400)
+            return Response(
+                {"detail": "Email не подтверждён"},
+                status=403
+            )
 
         token, _ = Token.objects.get_or_create(user=user)
 
