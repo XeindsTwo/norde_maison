@@ -1,5 +1,5 @@
 from django.contrib.auth.models import User
-from rest_framework import serializers
+from rest_framework import serializers, status
 from django.contrib.auth import password_validation
 from django.core import exceptions
 from rest_framework.validators import UniqueValidator
@@ -30,50 +30,64 @@ class UserSerializer(serializers.ModelSerializer):
 
 class RegisterSerializer(serializers.ModelSerializer):
 
-    email = serializers.EmailField(
-        validators=[UniqueValidator(queryset=User.objects.all())]
+    email = serializers.EmailField()
+    password = serializers.CharField(write_only=True, min_length=8)
+    first_name = serializers.CharField(
+        required=True,
+        error_messages={
+            "blank": "Поле имени обязательно",
+            "required": "Поле имени обязательно"
+        }
     )
 
-    password = serializers.CharField(write_only=True)
+    last_name = serializers.CharField(
+        required=True,
+        error_messages={
+            "blank": "Поле фамилии обязательно",
+            "required": "Поле фамилии обязательно"
+        }
+    )
 
     class Meta:
         model = User
         fields = (
-            "username",
             "email",
             "password",
             "first_name",
             "last_name"
         )
 
-    def validate(self, data):
+    def validate_email(self, value):
+        value = value.lower()
 
-        password = data.get("password")
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError("Email уже зарегистрирован")
 
-        user = User(
-            username=data.get("username"),
-            email=data.get("email")
-        )
+        return value
 
-        try:
-            password_validation.validate_password(password, user)
-        except exceptions.ValidationError as e:
-            raise serializers.ValidationError({
-                "password": list(e.messages)
-            })
+    def validate_first_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Введите имя")
+        return value
 
-        return data
+    def validate_last_name(self, value):
+        if not value.strip():
+            raise serializers.ValidationError("Введите фамилию")
+        return value
+
+    def validate_password(self, value):
+        password_validation.validate_password(value)
+        return value
 
     def create(self, validated_data):
-
-        password = validated_data.pop("password")
+        email = validated_data["email"].lower()
 
         user = User.objects.create_user(
-            username=validated_data["email"],
-            email=validated_data["email"],
-            first_name=validated_data.get("first_name", ""),
-            last_name=validated_data.get("last_name", ""),
-            password=password,
+            username=email,
+            email=email,
+            first_name=validated_data["first_name"],
+            last_name=validated_data["last_name"],
+            password=validated_data["password"],
             is_active=False
         )
 
