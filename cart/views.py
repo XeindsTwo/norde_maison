@@ -1,8 +1,10 @@
+from django.db import transaction
+from django.shortcuts import get_object_or_404
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
-from django.shortcuts import get_object_or_404
 
 from catalog.models import ProductVariant
 
@@ -13,7 +15,9 @@ from .serializers import (
     UpdateCartItemSerializer,
 )
 
+
 MAX_QUANTITY_PER_VARIANT = 5
+AVAILABLE_CURRENCIES = {"rub", "kzt", "byn"}
 
 
 class CartView(APIView):
@@ -22,17 +26,25 @@ class CartView(APIView):
     def get(self, request):
         cart, _ = Cart.objects.get_or_create(user=request.user)
 
-        serializer = CartSerializer(cart)
+        currency = request.query_params.get("currency", "rub")
+        if currency not in AVAILABLE_CURRENCIES:
+            currency = "rub"
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
+        serializer = CartSerializer(
+            cart,
+            context={
+                "request": request,
+                "currency": currency
+            }
         )
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class AddToCartView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def post(self, request):
         serializer = AddToCartSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -40,6 +52,12 @@ class AddToCartView(APIView):
         data = serializer.validated_data
 
         variant = get_object_or_404(ProductVariant, id=data["variant"])
+
+        if not variant.product.is_visible:
+            return Response(
+                {"detail": "Товар недоступен"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         if variant.stock <= 0:
             return Response(
@@ -55,42 +73,26 @@ class AddToCartView(APIView):
             defaults={"quantity": data["quantity"]},
         )
 
-        if not created:
-            new_quantity = item.quantity + data["quantity"]
+        requested_quantity = data["quantity"]
 
-            if new_quantity > variant.stock:
-                return Response(
-                    {"detail": "Превышен остаток на складе"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        if created:
+            new_quantity = requested_quantity
+        else:
+            new_quantity = item.quantity + requested_quantity
 
-            if new_quantity > MAX_QUANTITY_PER_VARIANT:
-                return Response(
-                    {"detail": f"Максимум {MAX_QUANTITY_PER_VARIANT} единиц товара"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-
-            item.quantity = new_quantity
-            item.save()
-
-            return Response(
-                {"detail": "Количество товара обновлено"},
-                status=status.HTTP_200_OK
-            )
-
-        if data["quantity"] > variant.stock:
+        if new_quantity > variant.stock:
             return Response(
                 {"detail": "Превышен остаток на складе"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if data["quantity"] > MAX_QUANTITY_PER_VARIANT:
+        if new_quantity > MAX_QUANTITY_PER_VARIANT:
             return Response(
                 {"detail": f"Максимум {MAX_QUANTITY_PER_VARIANT} единиц товара"},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        item.quantity = data["quantity"]
+        item.quantity = new_quantity
         item.save()
 
         return Response(
@@ -102,6 +104,7 @@ class AddToCartView(APIView):
 class UpdateCartItemView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def patch(self, request, pk):
         serializer = UpdateCartItemSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -114,9 +117,7 @@ class UpdateCartItemView(APIView):
 
         new_quantity = serializer.validated_data["quantity"]
 
-        variant_stock = item.variant.stock
-
-        if new_quantity > variant_stock:
+        if new_quantity > item.variant.stock:
             return Response(
                 {"detail": "Превышен остаток на складе"},
                 status=status.HTTP_400_BAD_REQUEST
@@ -140,6 +141,7 @@ class UpdateCartItemView(APIView):
 class DeleteCartItemView(APIView):
     permission_classes = [IsAuthenticated]
 
+    @transaction.atomic
     def delete(self, request, pk):
         item = get_object_or_404(
             CartItem,
@@ -149,7 +151,4 @@ class DeleteCartItemView(APIView):
 
         item.delete()
 
-        return Response(
-            {"detail": "Товар удалён"},
-            status=status.HTTP_204_NO_CONTENT
-        )
+        return Response(status=status.HTTP_204_NO_CONTENT)

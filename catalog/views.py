@@ -186,7 +186,9 @@ class ProductDetailView(generics.RetrieveAPIView):
     serializer_class = ProductDetailSerializer
     permission_classes = [permissions.AllowAny]
 
-    queryset = Product.objects.select_related(
+    queryset = Product.objects.filter(
+        is_visible=True
+    ).select_related(
         'subcategory',
         'subcategory__category'
     ).prefetch_related(
@@ -208,7 +210,9 @@ class ProductDetailView(generics.RetrieveAPIView):
     )
 
     def get_serializer_context(self):
-        return {"request": self.request}
+        return {
+            "request": self.request
+        }
 
 
 class SubCategoryDetailView(generics.RetrieveAPIView):
