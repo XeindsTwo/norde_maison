@@ -3,6 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <title>Welcome</title>
+  <style>
+    .logo {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+  </style>
 </head>
 
 <body style="margin:0; background:#FEFFFE;
@@ -24,7 +32,7 @@
 
         <tr>
           <td style="padding:40px; text-align:center;">
-            <a href="http://localhost/5173/" target="_blank">
+            <a class="logo" href="http://localhost/5173/" target="_blank">
               <svg width="166" height="22" viewBox="0 0 166 22" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path
                     d="M0 20.9965V0.878341H3.23452L15.0015 17.8038L11.5997 14.9876H13.1193V0.878341H16.6885V20.9965H13.4818L1.70091 4.02921L5.10274 6.83154H3.56913V20.9965H0Z"
@@ -74,7 +82,7 @@
               {% if first_name %}
                 {{ first_name }},
               {% endif %}
-              Добро пожаловать в магазин Norde Maison!
+              добро пожаловать в магазин Norde Maison!
             </h1>
 
             <p style="

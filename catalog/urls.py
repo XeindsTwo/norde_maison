@@ -5,6 +5,7 @@ from .views import (
     SubCategoryDetailView,
     ProductListView,
     ProductDetailView,
+    ProductSearchView
 )
 
 urlpatterns = [
@@ -13,4 +14,5 @@ urlpatterns = [
     path('subcategories/<int:pk>/', SubCategoryDetailView.as_view(), name='subcategory-detail'),
     path('products/', ProductListView.as_view(), name='product-list'),
     path('products/<int:pk>/', ProductDetailView.as_view(), name='product-detail'),
+    path("products/search/", ProductSearchView.as_view()),
 ]

@@ -30,7 +30,7 @@ class FavoriteToggleView(APIView):
         if not product:
             return Response(
                 {"detail": "Товар не найден"},
-                status=404
+                status=status.HTTP_404_NOT_FOUND
             )
 
         favorite, created = Favorite.objects.get_or_create(
@@ -40,15 +40,20 @@ class FavoriteToggleView(APIView):
 
         if not created:
             favorite.delete()
-            return Response({"favorite": False})
+            return Response({
+                "product_id": product_id,
+                "favorite": False
+            })
 
-        return Response({"favorite": True})
+        return Response({
+            "product_id": product_id,
+            "favorite": True
+        })
 
 
 class FavoriteDeleteView(APIView):
     permission_classes = [IsAuthenticated]
 
-    @transaction.atomic
     def delete(self, request, product_id):
         Favorite.objects.filter(
             user=request.user,
@@ -79,4 +84,6 @@ class FavoriteListView(APIView):
             context={"request": request}
         )
 
-        return Response(serializer.data)
+        return Response({
+            "data": serializer.data
+        })
