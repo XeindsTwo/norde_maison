@@ -1,12 +1,16 @@
 from django.contrib.auth.models import User
-from rest_framework import serializers, status
+from rest_framework import serializers
 from django.contrib.auth import password_validation
-from django.core import exceptions
-from rest_framework.validators import UniqueValidator
 from .models import UserProfile
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ("phone", "tg_username", "address")
+
+
+class ProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         fields = ("phone", "tg_username", "address")
@@ -32,21 +36,9 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, min_length=8)
-    first_name = serializers.CharField(
-        required=True,
-        error_messages={
-            "blank": "Поле имени обязательно",
-            "required": "Поле имени обязательно"
-        }
-    )
 
-    last_name = serializers.CharField(
-        required=True,
-        error_messages={
-            "blank": "Поле фамилии обязательно",
-            "required": "Поле фамилии обязательно"
-        }
-    )
+    first_name = serializers.CharField(required=True)
+    last_name = serializers.CharField(required=True)
 
     class Meta:
         model = User
@@ -59,10 +51,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def validate_email(self, value):
         value = value.lower()
-
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("Email уже зарегистрирован")
-
         return value
 
     def validate_first_name(self, value):

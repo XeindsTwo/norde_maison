@@ -1,17 +1,21 @@
 import uuid
 from django.db import transaction
-from django.contrib.auth import authenticate
 from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import generics, permissions, serializers, status
+from rest_framework import generics, permissions, status
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.shortcuts import render
+from .models import EmailActivation, UserProfile
 
-from .serializers import RegisterSerializer, UserSerializer
+from .serializers import (
+    RegisterSerializer,
+    UserSerializer,
+    ProfileUpdateSerializer
+)
 from .models import EmailActivation
 
 
@@ -41,11 +45,11 @@ def format_validation_error(error):
 
 
 class RegisterView(generics.CreateAPIView):
-    queryset = None
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
     def create(self, request, *args, **kwargs):
+
         serializer = self.get_serializer(data=request.data)
 
         try:
@@ -74,29 +78,20 @@ class RegisterView(generics.CreateAPIView):
                 )
 
                 email.attach_alternative(html_message, "text/html")
-                try:
-                    email.send(fail_silently=False)
-                except Exception:
-                    raise Exception("Ошибка отправки email. Попробуйте позже")
+                email.send(fail_silently=False)
 
-            return Response(
-                {
-                    "success": True,
-                    "message": "Письмо подтверждения отправлено"
-                },
-                status=status.HTTP_201_CREATED
-            )
+            return Response({
+                "success": True,
+                "message": "Письмо подтверждения отправлено"
+            }, status=status.HTTP_201_CREATED)
 
         except Exception as e:
-            return Response(
-                {
-                    "success": False,
-                    "error": format_validation_error(
-                        getattr(e, "detail", e)
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({
+                "success": False,
+                "error": format_validation_error(
+                    getattr(e, "detail", e)
+                )
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(generics.GenericAPIView):
@@ -171,6 +166,31 @@ class MeView(APIView):
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
+    def patch(self, request):
+
+        user = request.user
+
+        profile, _ = UserProfile.objects.get_or_create(user=user)
+
+        user.first_name = request.data.get("first_name", user.first_name)
+        user.last_name = request.data.get("last_name", user.last_name)
+
+        user.save()
+
+        profile_serializer = ProfileUpdateSerializer(
+            profile,
+            data=request.data,
+            partial=True
+        )
+
+        profile_serializer.is_valid(raise_exception=True)
+        profile_serializer.save()
+
+        return Response({
+            "success": True,
+            "profile": profile_serializer.data
+        })
+
 
 class LogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -178,5 +198,4 @@ class LogoutView(APIView):
     def post(self, request):
         if request.auth:
             request.auth.delete()
-
         return Response({"detail": "Logout success"})

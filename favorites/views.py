@@ -22,10 +22,7 @@ class FavoriteToggleView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        product = Product.objects.filter(
-            id=product_id,
-            is_visible=True
-        ).first()
+        product = Product.objects.filter(id=product_id).first()
 
         if not product:
             return Response(
