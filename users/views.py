@@ -10,6 +10,8 @@ from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.shortcuts import render
 from .models import EmailActivation, UserProfile
+from .serializers import ChangePasswordSerializer
+from django.core.mail import EmailMultiAlternatives
 
 from .serializers import (
     RegisterSerializer,
@@ -199,3 +201,58 @@ class LogoutView(APIView):
         if request.auth:
             request.auth.delete()
         return Response({"detail": "Logout success"})
+
+class ChangePasswordView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+
+        old_password = serializer.validated_data["old_password"]
+        new_password = serializer.validated_data["new_password"]
+
+        if not user.check_password(old_password):
+            return Response(
+                {"detail": "Неверный текущий пароль"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        current_token = request.auth
+
+        Token.objects.filter(user=user).exclude(
+            key=current_token.key if current_token else ""
+        ).delete()
+
+        if current_token:
+            Token.objects.filter(key=current_token.key).delete()
+
+        new_token = Token.objects.create(user=user)
+
+        html_message = render_to_string(
+            "users/password_changed.html",
+            {
+                "first_name": user.first_name,
+            }
+        )
+
+        email = EmailMultiAlternatives(
+            subject="Пароль успешно изменён",
+            body="Пароль был изменён",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[user.email]
+        )
+
+        email.attach_alternative(html_message, "text/html")
+        email.send(fail_silently=True)
+
+        return Response({
+            "success": True,
+            "token": new_token.key
+        })

@@ -4,7 +4,8 @@ from .views import (
     LoginView,
     MeView,
     LogoutView,
-    ConfirmEmailView
+    ConfirmEmailView,
+    ChangePasswordView
 )
 
 urlpatterns = [
@@ -13,4 +14,5 @@ urlpatterns = [
     path("me/", MeView.as_view()),
     path("logout/", LogoutView.as_view()),
     path("confirm/<str:token>/", ConfirmEmailView.as_view()),
+    path("change-password/", ChangePasswordView.as_view()),
 ]
