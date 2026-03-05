@@ -117,6 +117,7 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:3000',
+    "https://norde-maison-frontend.vercel.app"
 ]
 
 SITE_URL = "http://127.0.0.1:8000"

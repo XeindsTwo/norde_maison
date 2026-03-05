@@ -28,6 +28,13 @@ COLORS = [
     ("Бежевый", "#d6c3a3"),
     ("Синий", "#2f4b7c"),
     ("Зеленый", "#3a6b35"),
+    ("Красный", "#c0392b"),
+    ("Розовый", "#e84393"),
+    ("Фиолетовый", "#6c5ce7"),
+    ("Жёлтый", "#f1c40f"),
+    ("Оранжевый", "#e67e22"),
+    ("Голубой", "#3498db"),
+    ("Бирюзовый", "#1abc9c"),
 ]
 
 SIZES = ["XS", "S", "M", "L", "XL"]
@@ -44,26 +51,42 @@ SKIRT_NAMES = [
     "Юбка минималистичная",
     "Юбка струящаяся",
     "Юбка летняя",
-    "Юбка повседневная"
+    "Юбка повседневная",
+    "Юбка офисная",
+    "Юбка премиум",
+    "Юбка базовая",
+    "Юбка вечерняя",
+    "Юбка длинная",
+    "Юбка короткая",
+    "Юбка трикотажная",
+    "Юбка дизайнерская"
 ]
 
 
 def generate_product_name():
     base = random.choice(SKIRT_NAMES)
 
-    suffixes = [
-        "",
-        "Norde",
-        "Maison",
-        "Edition",
-        "Soft Line",
-        "Essential"
-    ]
-
     if random.random() < 0.5:
-        base += f" {random.choice(suffixes)}"
+        suffix = random.choice([
+            "Norde",
+            "Maison",
+            "Edition",
+            "Soft Line",
+            "Essential",
+            "Luxury",
+            "Urban",
+            "Classic"
+        ])
+        base += f" {suffix}"
+
+    if random.random() < 0.3:
+        base += f" {random.randint(2023, 2025)}"
 
     return base
+
+
+def get_price():
+    return random.randint(2300, 23000) + random.choice([0, 49, 90, 99])
 
 
 def get_variant_color_count():
@@ -75,8 +98,7 @@ def get_variant_color_count():
         return 2
     elif r < 0.9:
         return 3
-    else:
-        return 4
+    return 4
 
 
 def get_skirt_subcategories():
@@ -86,7 +108,7 @@ def get_skirt_subcategories():
     )
 
 
-def collect_skirt_seed_images():
+def collect_seed_images():
     images = []
 
     skirt_path = SEED_MEDIA_PATH / "skirt"
@@ -102,68 +124,56 @@ def collect_skirt_seed_images():
     return images
 
 
-def seed_skirt_products(count=40):
+def seed_skirt_products(count=70):
     subcategories = list(get_skirt_subcategories())
 
     if not subcategories:
-        print("Нет подкатегории юбок")
+        print("Нет подкатегорий юбок")
         return
 
-    images_pool = collect_skirt_seed_images()
+    images_pool = collect_seed_images()
 
     if not images_pool:
-        print("Нет изображений в skirt seed папке")
+        print("Нет seed изображений")
         return
 
-    print(f"Генерация {count} товаров для юбок...")
+    print(f"Генерация {count} товаров юбок...")
 
     for _ in range(count):
-        subcategory = random.choice(subcategories)
 
         product = Product.objects.create(
-            subcategory=subcategory,
+            subcategory=random.choice(subcategories),
             name=generate_product_name(),
             description=fake.paragraph(nb_sentences=5),
-            price=random.randint(3000, 18000),
+            price_rub=get_price(),
+            price_kzt=get_price() * 5,
+            price_byn=get_price() / 3,
             material=random.choice(["Хлопок", "Вискоза", "Полиэстер", "Лён"]),
             is_visible=True,
         )
 
-        # Главное изображение
-        try:
+        img_path = random.choice(images_pool)
+
+        with open(img_path, "rb") as f:
+            product.main_image.save(img_path.name, File(f), save=True)
+
+        for _ in range(random.randint(1, 3)):
             img_path = random.choice(images_pool)
 
             with open(img_path, "rb") as f:
-                product.main_image.save(
-                    img_path.name,
-                    File(f),
-                    save=True,
+                ProductImage.objects.create(
+                    product=product,
+                    image=File(f),
+                    order=random.randint(0, 5),
                 )
-        except Exception:
-            pass
 
-        # Дополнительные изображения
-        for _ in range(random.randint(1, 3)):
-            try:
-                img_path = random.choice(images_pool)
-
-                with open(img_path, "rb") as f:
-                    ProductImage.objects.create(
-                        product=product,
-                        image=File(f),
-                        order=random.randint(0, 5),
-                    )
-            except Exception:
-                pass
-
-        # Варианты товара
         used_pairs = set()
 
-        color_variant_count = get_variant_color_count()
+        color_count = random.randint(1, 4)
 
         selected_colors = random.sample(
             COLORS,
-            min(color_variant_count, len(COLORS))
+            min(color_count, len(COLORS))
         )
 
         sizes = random.sample(
@@ -182,19 +192,16 @@ def seed_skirt_products(count=40):
 
                 used_pairs.add((color_hex, size))
 
-                try:
-                    ProductVariant.objects.create(
-                        product=product,
-                        color_name=color_name,
-                        color_hex=color_hex,
-                        size=size,
-                        stock=random.randint(0, 200),
-                    )
-                except Exception:
-                    pass
+                ProductVariant.objects.create(
+                    product=product,
+                    color_name=color_name,
+                    color_hex=color_hex,
+                    size=size,
+                    stock=random.randint(0, 200),
+                )
 
-    print("Генерация юбок завершена")
+    print("Seed юбок завершён")
 
 
 if __name__ == "__main__":
-    seed_skirt_products(40)
+    seed_skirt_products(70)
