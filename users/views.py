@@ -1,4 +1,5 @@
 import uuid
+import threading
 from django.db import transaction
 from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
@@ -11,7 +12,6 @@ from django.conf import settings
 from django.shortcuts import render
 from .models import EmailActivation, UserProfile
 from .serializers import ChangePasswordSerializer
-from django.core.mail import EmailMultiAlternatives
 
 from .serializers import (
     RegisterSerializer,
@@ -50,50 +50,63 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
+    def send_activation_email_async(self, user, activation_token):
+        """
+        Отправка email в отдельном потоке (не блокирует HTTP request).
+        """
+
+        try:
+            confirm_url = f"{settings.SITE_URL}/api/auth/confirm/{activation_token}/"
+
+            html_message = render_to_string(
+                "users/welcome_email.html",
+                {
+                    "first_name": user.first_name,
+                    "confirm_url": confirm_url
+                }
+            )
+
+            email = EmailMultiAlternatives(
+                subject="Подтверждение регистрации",
+                body="Подтвердите email",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[user.email]
+            )
+
+            email.attach_alternative(html_message, "text/html")
+            email.send(fail_silently=False)
+
+        except Exception:
+            pass
+
     def create(self, request, *args, **kwargs):
 
         serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        try:
-            serializer.is_valid(raise_exception=True)
+        user = None
+        activation = None
 
-            with transaction.atomic():
-                user = serializer.save()
+        with transaction.atomic():
+            user = serializer.save()
 
-                activation = EmailActivation.objects.get(user=user)
+            activation = EmailActivation.objects.get(user=user)
 
-                confirm_url = f"{settings.SITE_URL}/api/auth/confirm/{activation.token}/"
+        if user and activation:
+            thread = threading.Thread(
+                target=self.send_activation_email_async,
+                args=(user, activation.token),
+            )
+            thread.daemon = True
+            thread.start()
 
-                html_message = render_to_string(
-                    "users/welcome_email.html",
-                    {
-                        "first_name": user.first_name,
-                        "confirm_url": confirm_url
-                    }
-                )
-
-                email = EmailMultiAlternatives(
-                    subject="Подтверждение регистрации",
-                    body="Подтвердите email",
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    to=[user.email]
-                )
-
-                email.attach_alternative(html_message, "text/html")
-                email.send(fail_silently=False)
-
-            return Response({
+        return Response(
+            {
                 "success": True,
                 "message": "Письмо подтверждения отправлено"
-            }, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            return Response({
-                "success": False,
-                "error": format_validation_error(
-                    getattr(e, "detail", e)
-                )
-            }, status=status.HTTP_400_BAD_REQUEST)
+            },
+            status=status.HTTP_201_CREATED
+        )
 
 
 class LoginView(generics.GenericAPIView):
