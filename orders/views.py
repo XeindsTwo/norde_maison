@@ -55,7 +55,7 @@ class CheckoutView(APIView):
 
         order = Order.objects.create(
             user=user,
-            status=OrderStatus.CREATED,
+            status=OrderStatus.ASSEMBLY,
             country=data["country"],
             delivery_method=data["delivery_method"],
             first_name=data.get("first_name", ""),
@@ -127,6 +127,7 @@ class OrderPreviewView(APIView):
                 "price_kzt": product.price_kzt,
                 "price_byn": product.price_byn,
                 "image_url": request.build_absolute_uri(product.main_image.url) if product.main_image else None,
+                "product_id": product.id
             })
 
         serializer = OrderPreviewSerializer({

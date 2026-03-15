@@ -1,11 +1,7 @@
 from django.urls import path
 from .views import (
-    RegisterView,
-    LoginView,
-    MeView,
-    LogoutView,
-    ConfirmEmailView,
-    ChangePasswordView
+    RegisterView, LoginView, MeView, LogoutView,
+    ConfirmEmailView, ChangePasswordView, UserOrderHistoryView
 )
 
 urlpatterns = [
@@ -15,4 +11,5 @@ urlpatterns = [
     path("logout/", LogoutView.as_view()),
     path("confirm/<str:token>/", ConfirmEmailView.as_view()),
     path("change-password/", ChangePasswordView.as_view()),
+    path("orders/", UserOrderHistoryView.as_view(), name="profile-orders"),
 ]

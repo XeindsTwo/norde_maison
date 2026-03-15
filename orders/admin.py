@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import mark_safe
 from django.urls import reverse
-from .models import Order, OrderItem
+from .models import Order, OrderItem, OrderStatus
 
 
 def fmt_price(value):
@@ -16,11 +16,10 @@ def fmt_price(value):
 
 
 STATUS_CONFIG = {
-    "created":   ("#f0f0f0", "#555555", "Создан"),
-    "paid":      ("#d4edda", "#155724", "Оплачен"),
-    "shipped":   ("#cce5ff", "#004085", "Передан в доставку"),
-    "completed": ("#d1ecf1", "#0c5460", "Доставлен"),
-    "cancelled": ("#f8d7da", "#721c24", "Отменён"),
+    "assembly":   ("#fef3c7", "#d97706", "В сборке"),
+    "in_way":     ("#dbeafe", "#1d4ed8", "В пути"),
+    "delivered":  ("#d1ecf1", "#0c5460", "Доставлен"),
+    "cancelled":  ("#f8d7da", "#721c24", "Отменён"),
 }
 
 COUNTRY_SHORT = {
@@ -129,6 +128,14 @@ class OrderAdmin(admin.ModelAdmin):
         "telegram_display",
         "phone_display",
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(self.readonly_fields)
+        if obj and obj.status == OrderStatus.CANCELLED:
+            if 'status' not in readonly_fields:
+                readonly_fields.append('status')
+        return readonly_fields
+
     fieldsets = (
         ("Заказ", {
             "fields": (
@@ -155,10 +162,11 @@ class OrderAdmin(admin.ModelAdmin):
     )
 
     def status_badge(self, obj):
-        bg, color, label = STATUS_CONFIG.get(obj.status, ("#eee", "#333", obj.status))
+        bg, color, label = STATUS_CONFIG.get(obj.status, ("#f0f0f0", "#555555", obj.status))
         return mark_safe(
-            f'<span style="padding:3px 10px; border-radius:12px; font-size:12px; '
-            f'font-weight:500; background:{bg}; color:{color};">{label}</span>'
+            f'<span style="padding:4px 12px; border-radius:16px; font-size:13px; '
+            f'font-weight:600; background:{bg}; color:{color}; box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
+            f'{label}</span>'
         )
     status_badge.short_description = "Статус"
 
@@ -197,7 +205,7 @@ class OrderAdmin(admin.ModelAdmin):
 
     def delivery_price_display(self, obj):
         if obj.delivery_price == 0:
-            return mark_safe('<span style="color:#19c840; font-weight:500;">Бесплатно</span>')
+            return mark_safe('<span style="color:#10b981; font-weight:600;">Бесплатно</span>')
         return fmt_price(obj.delivery_price)
     delivery_price_display.short_description = "Доставка"
     delivery_price_display.admin_order_field = "delivery_price"
@@ -231,3 +239,6 @@ class OrderAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return None
+
+    class Media:
+        css = {"all": ("admin/custom_admin.css",)}

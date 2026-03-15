@@ -4,6 +4,7 @@ from django.db import transaction
 from rest_framework.authtoken.models import Token
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.generics import ListAPIView
 from rest_framework import generics, permissions, status
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
@@ -11,14 +12,11 @@ from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.shortcuts import render
 from .models import EmailActivation, UserProfile
-from .serializers import ChangePasswordSerializer
-
 from .serializers import (
-    RegisterSerializer,
-    UserSerializer,
-    ProfileUpdateSerializer
+    RegisterSerializer, UserSerializer, ProfileUpdateSerializer, ChangePasswordSerializer
 )
-from .models import EmailActivation
+from orders.models import Order
+from orders.serializers import OrderDetailSerializer
 
 
 def format_validation_error(error):
@@ -175,6 +173,16 @@ class ConfirmEmailView(APIView):
             return render(request, "users/email_not_found.html")
 
 
+class UserOrderHistoryView(ListAPIView):
+    serializer_class = OrderDetailSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user).prefetch_related(
+            'items__variant__product'
+        ).order_by('-created_at')[:10]
+
+
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -182,7 +190,6 @@ class MeView(APIView):
         return Response(UserSerializer(request.user).data)
 
     def patch(self, request):
-
         user = request.user
 
         profile, _ = UserProfile.objects.get_or_create(user=user)
@@ -214,6 +221,7 @@ class LogoutView(APIView):
         if request.auth:
             request.auth.delete()
         return Response({"detail": "Logout success"})
+
 
 class ChangePasswordView(APIView):
     permission_classes = [permissions.IsAuthenticated]
