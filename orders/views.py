@@ -20,6 +20,7 @@ class CheckoutView(APIView):
     def post(self, request):
         serializer = CheckoutSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
         user = request.user
 
         cart = Cart.objects.prefetch_related("items__variant__product").filter(user=user).first()
@@ -42,39 +43,45 @@ class CheckoutView(APIView):
                 "color": variant.color_name,
                 "size": variant.size,
                 "quantity": item.quantity,
-                "price": price
+                "price": price,
             })
 
         if not snapshot_buffer:
             return Response({"detail": "Нет доступных товаров для оформления"}, status=400)
 
-        delivery_price = serializer.validated_data["delivery_price"]
+        delivery_price = data["delivery_price"]
         if total_price >= FREE_DELIVERY_THRESHOLD:
             delivery_price = Decimal("0")
 
         order = Order.objects.create(
             user=user,
             status=OrderStatus.CREATED,
-            country=serializer.validated_data["country"],
-            delivery_method=serializer.validated_data["delivery_method"],
-            address=serializer.validated_data.get("address", ""),
-            comment=serializer.validated_data.get("comment", ""),
+            country=data["country"],
+            delivery_method=data["delivery_method"],
+            first_name=data.get("first_name", ""),
+            last_name=data.get("last_name", ""),
+            middle_name=data.get("middle_name", ""),
+            phone=data.get("phone", ""),
+            telegram=data.get("telegram", ""),
+            address=data.get("address", ""),
+            delivery_extra=data.get("delivery_extra", None),
+            comment=data.get("comment", ""),
             total_price=total_price + delivery_price,
-            delivery_price=delivery_price
+            delivery_price=delivery_price,
         )
 
-        for data in snapshot_buffer:
+        for item_data in snapshot_buffer:
             OrderItem.objects.create(
                 order=order,
-                variant=data["variant"],
-                product_name=data["product_name"],
-                color=data["color"],
-                size=data["size"],
-                quantity=data["quantity"],
-                price_snapshot=data["price"]
+                variant=item_data["variant"],
+                product_name=item_data["product_name"],
+                color=item_data["color"],
+                size=item_data["size"],
+                quantity=item_data["quantity"],
+                price_snapshot=item_data["price"],
             )
-            data["variant"].stock -= data["quantity"]
-            data["variant"].save()
+            item_data["variant"].stock -= item_data["quantity"]
+            item_data["variant"].save()
 
         cart.items.all().delete()
         return Response({"success": True, "order_number": order.order_number})

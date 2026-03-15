@@ -1,20 +1,21 @@
 import uuid
 from django.db import models
+from django.db.models import JSONField
 from django.conf import settings
 from django.utils import timezone
 
 
 class OrderStatus(models.TextChoices):
-    CREATED = "created", "Создан"
-    PAID = "paid", "Оплачен"
-    SHIPPED = "shipped", "Передан в доставку"
+    CREATED   = "created",   "Создан"
+    PAID      = "paid",      "Оплачен"
+    SHIPPED   = "shipped",   "Передан в доставку"
     COMPLETED = "completed", "Доставлен"
     CANCELLED = "cancelled", "Отменён"
 
 
 class DeliveryMethod(models.TextChoices):
-    PICKUP = "pickup", "Самовывоз"
-    COURIER = "courier", "Курьер"
+    CDEK_PVZ     = "cdek_pvz",     "СДЭК — пункт выдачи"
+    CDEK_COURIER = "cdek_courier", "СДЭК — курьер"
 
 
 class Country(models.TextChoices):
@@ -56,7 +57,13 @@ class Order(models.Model):
         choices=DeliveryMethod.choices,
         verbose_name="Способ доставки"
     )
+    first_name = models.CharField(max_length=100, blank=True, verbose_name="Имя")
+    last_name = models.CharField(max_length=100, blank=True, verbose_name="Фамилия")
+    middle_name = models.CharField(max_length=100, blank=True, verbose_name="Отчество")
+    phone = models.CharField(max_length=30, blank=True, verbose_name="Телефон")
+    telegram = models.CharField(max_length=100, blank=True, verbose_name="Telegram")
     address = models.TextField(blank=True, verbose_name="Адрес")
+    delivery_extra = JSONField(blank=True, null=True, verbose_name="Доп. данные доставки")
     comment = models.TextField(blank=True, verbose_name="Комментарий")
     delivery_price = models.DecimalField(
         max_digits=12,
@@ -96,27 +103,15 @@ class OrderItem(models.Model):
         null=True,
         verbose_name="Вариант товара"
     )
-    product_name = models.CharField(
-        max_length=300,
-        verbose_name="Название товара"
-    )
-    color = models.CharField(
-        max_length=100,
-        verbose_name="Цвет"
-    )
-    size = models.CharField(
-        max_length=20,
-        verbose_name="Размер"
-    )
+    product_name = models.CharField(max_length=300, verbose_name="Название товара")
+    color = models.CharField(max_length=100, verbose_name="Цвет")
+    size = models.CharField(max_length=20, verbose_name="Размер")
     price_snapshot = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         verbose_name="Цена на момент покупки"
     )
-    quantity = models.PositiveIntegerField(
-        default=1,
-        verbose_name="Количество"
-    )
+    quantity = models.PositiveIntegerField(default=1, verbose_name="Количество")
 
     class Meta:
         verbose_name = "Позиция заказа"
@@ -124,5 +119,4 @@ class OrderItem(models.Model):
 
     def subtotal(self):
         return self.price_snapshot * self.quantity
-
     subtotal.short_description = "Сумма позиции"

@@ -3,3 +3,7 @@
     pointer-events: none;
     cursor: pointer;
 }
+
+#items-group .original {
+    display: none;
+}
