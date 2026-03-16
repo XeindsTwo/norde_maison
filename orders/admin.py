@@ -16,10 +16,10 @@ def fmt_price(value):
 
 
 STATUS_CONFIG = {
-    "assembly":   ("#fef3c7", "#d97706", "В сборке"),
-    "in_way":     ("#dbeafe", "#1d4ed8", "В пути"),
-    "delivered":  ("#d1ecf1", "#0c5460", "Доставлен"),
-    "cancelled":  ("#f8d7da", "#721c24", "Отменён"),
+    "assembly": ("#fef3c7", "#d97706", "В сборке"),
+    "in_way": ("#dbeafe", "#1d4ed8", "В пути"),
+    "delivered": ("#d1ecf1", "#0c5460", "Доставлен"),
+    "cancelled": ("#f8d7da", "#721c24", "Отменён"),
 }
 
 COUNTRY_SHORT = {
@@ -59,6 +59,7 @@ class OrderItemInline(admin.TabularInline):
                 f'style="height:60px; width:48px; border-radius:6px; object-fit:cover;" />'
             )
         return "—"
+
     product_preview.short_description = "Фото"
 
     def product_link(self, obj):
@@ -66,6 +67,7 @@ class OrderItemInline(admin.TabularInline):
             url = reverse("admin:catalog_product_change", args=[obj.variant.product.pk])
             return mark_safe(f'<a href="{url}">{obj.product_name}</a>')
         return obj.product_name
+
     product_link.short_description = "Название товара"
 
     def color_display(self, obj):
@@ -77,16 +79,19 @@ class OrderItemInline(admin.TabularInline):
                 f'{obj.color}</div>'
             )
         return obj.color
+
     color_display.short_description = "Цвет"
 
     def price_snapshot_display(self, obj):
         return fmt_price(obj.price_snapshot)
+
     price_snapshot_display.short_description = "Цена на момент покупки"
 
     def subtotal_display(self, obj):
         if obj.price_snapshot and obj.quantity:
             return fmt_price(obj.price_snapshot * obj.quantity)
         return "—"
+
     subtotal_display.short_description = "Сумма"
 
 
@@ -131,7 +136,7 @@ class OrderAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(self.readonly_fields)
-        if obj and obj.status == OrderStatus.CANCELLED:
+        if obj and obj.status in [OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
             if 'status' not in readonly_fields:
                 readonly_fields.append('status')
         return readonly_fields
@@ -168,14 +173,17 @@ class OrderAdmin(admin.ModelAdmin):
             f'font-weight:600; background:{bg}; color:{color}; box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
             f'{label}</span>'
         )
+
     status_badge.short_description = "Статус"
 
     def country_short(self, obj):
         return COUNTRY_SHORT.get(obj.country, obj.country)
+
     country_short.short_description = "Страна"
 
     def user_display(self, obj):
         return str(obj.user)
+
     user_display.short_description = "Пользователь"
 
     def fio_display(self, obj):
@@ -184,29 +192,35 @@ class OrderAdmin(admin.ModelAdmin):
             parts.append(obj.middle_name)
         result = " ".join(p for p in parts if p)
         return result if result.strip() else "Не указано"
+
     fio_display.short_description = "ФИО"
 
     def phone_display(self, obj):
         return obj.phone if obj.phone else "Не указано"
+
     phone_display.short_description = "Телефон"
 
     def telegram_display(self, obj):
         return obj.telegram if obj.telegram else "Не указано"
+
     telegram_display.short_description = "Telegram"
 
     def total_price_display(self, obj):
         return fmt_price(obj.total_price)
+
     total_price_display.short_description = "Итоговая сумма"
     total_price_display.admin_order_field = "total_price"
 
     def total_price_detail(self, obj):
         return fmt_price(obj.total_price)
+
     total_price_detail.short_description = "Итоговая сумма"
 
     def delivery_price_display(self, obj):
         if obj.delivery_price == 0:
             return mark_safe('<span style="color:#10b981; font-weight:600;">Бесплатно</span>')
         return fmt_price(obj.delivery_price)
+
     delivery_price_display.short_description = "Доставка"
     delivery_price_display.admin_order_field = "delivery_price"
 
@@ -214,6 +228,7 @@ class OrderAdmin(admin.ModelAdmin):
         if obj.delivery_price == 0:
             return "Бесплатно"
         return fmt_price(obj.delivery_price)
+
     delivery_price_detail.short_description = "Стоимость доставки"
 
     def delivery_extra_display(self, obj):
@@ -228,10 +243,12 @@ class OrderAdmin(admin.ModelAdmin):
         if extra.get("apartment"):
             parts.append(f"Квартира: {extra['apartment']}")
         return mark_safe(" &nbsp;·&nbsp; ".join(parts)) if parts else "—"
+
     delivery_extra_display.short_description = "Подъезд (дом) / Этаж / Квартира"
 
     def comment_display(self, obj):
         return obj.comment if obj.comment else "Не указано"
+
     comment_display.short_description = "Комментарий"
 
     def has_add_permission(self, request):

@@ -84,6 +84,7 @@ class CheckoutView(APIView):
             item_data["variant"].save()
 
         cart.items.all().delete()
+
         return Response({"success": True, "order_number": order.order_number})
 
 

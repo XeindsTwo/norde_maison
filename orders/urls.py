@@ -5,4 +5,4 @@ urlpatterns = [
     path("checkout/", CheckoutView.as_view()),
     path("history/", OrderHistoryView.as_view()),
     path("preview/", OrderPreviewView.as_view()),
-]
+    ]
