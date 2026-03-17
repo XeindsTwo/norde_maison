@@ -1,0 +1,33 @@
+{% extends "emails/base.html" %}
+{% block content %}
+<h1 style="color:#111111;max-width: 390px; margin: 0 auto 16px; font-size:32px; line-height: 1.2; font-weight:500;letter-spacing:-0.02em;">
+  {% if status == 'in_way' %}
+    Ваш заказ <span>№{{ order.order_number }}</span> передан в доставку
+  {% elif status == 'delivered' %}
+    Ваш заказ <span>№{{ order.order_number }}</span> успешно доставлен
+  {% elif status == 'cancelled' %}
+    Заказ <span>№{{ order.order_number }}</span> отменён
+  {% endif %}
+</h1>
+
+<p style="font-size:18px;color:rgba(18,18,21,0.8); max-width: 430px; margin: 0 auto 45px;line-height:1.35;">
+  {% if status == 'in_way' %}
+    Мы дадим знать, когда заказ будет доставлен.
+  {% elif status == 'delivered' %}
+    Спасибо за заказ! Если появятся какие-то проблемы, свяжитесь с нами через Telegram
+  {% elif status == 'cancelled' %}
+    Заказ был отменён. Если у вас есть вопросы, <br> пишите в поддержку.
+  {% endif %}
+</p>
+
+<a href="{{ profile_url }}"
+   style="background:#111111;color:#FFFFFF;padding:17px 44px;text-decoration:none;font-size:18px;font-weight:500;display:inline-block;">
+  {% if status == 'in_way' %}
+    Посмотреть заказ
+  {% elif status == 'delivered' %}
+    Перейти к покупкам
+  {% elif status == 'cancelled' %}
+    Перейти в профиль
+  {% endif %}
+</a>
+{% endblock %}

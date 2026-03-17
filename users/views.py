@@ -277,3 +277,97 @@ class ChangePasswordView(APIView):
             "success": True,
             "token": new_token.key
         })
+
+
+class PasswordResetView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = PasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data['email'].lower()
+
+        try:
+            user = User.objects.get(username__iexact=email)
+            if not user.is_active:
+                return Response({"detail": "Сначала подтвердите email"}, status=status.HTTP_400_BAD_REQUEST)
+
+            activation, _ = EmailActivation.objects.get_or_create(user=user)
+            activation.token = uuid.uuid4()
+            activation.save()
+
+            thread = threading.Thread(
+                target=self.send_reset_email_async,
+                args=(user, str(activation.token))
+            )
+            thread.daemon = True
+            thread.start()
+
+            return Response({"message": "Инструкции отправлены на email"})
+        except User.DoesNotExist:
+            return Response({"message": "Инструкции отправлены на email"})
+
+    def send_reset_email_async(self, user, token):
+        try:
+            confirm_url = f"{settings.FRONTEND_URL}/reset-password/{token}/"
+            html_message = render_to_string("users/password_reset.html", {
+                "first_name": user.first_name,
+                "confirm_url": confirm_url
+            })
+
+            email = EmailMultiAlternatives(
+                subject="Сброс пароля — Norde Maison",
+                body="Перейдите по ссылке для сброса пароля",
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[user.email]
+            )
+            email.attach_alternative(html_message, "text/html")
+            email.send(fail_silently=True)
+        except Exception:
+            pass
+
+
+class PasswordResetConfirmView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, token):
+        try:
+            activation = EmailActivation.objects.get(token=uuid.UUID(token))
+            if activation.is_expired():
+                return Response({"detail": "Ссылка истекла"}, status=400)
+
+            new_password = request.data.get('new_password')
+            validate_password(new_password)
+
+            user = activation.user
+            user.set_password(new_password)
+            user.save()
+
+            thread = threading.Thread(
+                target=self.send_password_changed_email_async,
+                args=(user,)
+            )
+            thread.daemon = True
+            thread.start()
+
+            Token.objects.filter(user=user).delete()
+            activation.delete()
+            return Response({"message": "Пароль сброшен"})
+        except (EmailActivation.DoesNotExist, ValueError, ValidationError):
+            return Response({"detail": "Неверная ссылка"}, status=400)
+
+    def send_password_changed_email_async(self, user):
+        try:
+            html_message = render_to_string("users/password_changed.html", {
+                "first_name": user.first_name
+            })
+            email = EmailMultiAlternatives(
+                "Пароль успешно изменён — Norde Maison",
+                "Пароль от вашего аккаунта обновлён",
+                settings.DEFAULT_FROM_EMAIL, [user.email]
+            )
+            email.attach_alternative(html_message, "text/html")
+            email.send(fail_silently=True)
+        except:
+            pass

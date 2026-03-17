@@ -255,7 +255,7 @@ class OrderAdmin(admin.ModelAdmin):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return None
+        return request.user.is_superuser
 
     class Media:
         css = {"all": ("admin/custom_admin.css",)}

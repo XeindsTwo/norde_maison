@@ -50,6 +50,10 @@ def send_order_notifications(sender, instance, created, **kwargs):
         thread_tg.daemon = True
         thread_tg.start()
 
+        thread_email = threading.Thread(target=_send_status_email_async, args=(instance, instance.status))
+        thread_email.daemon = True
+        thread_email.start()
+
 
 def _send_order_email_async(order):
     try:
@@ -69,6 +73,41 @@ def _send_order_email_async(order):
         )
         email.attach_alternative(html_message, "text/html")
         email.send(fail_silently=False)
+    except Exception:
+        pass
+
+
+def _send_status_email_async(order, status):
+    try:
+        if status == 'in_way':
+            profile_url = "http://localhost:5173/profile/"
+        elif status == 'delivered':
+            profile_url = "http://localhost:5173/"
+        elif status == 'cancelled':
+            profile_url = "http://localhost:5173/profile/"
+        else:
+            return
+
+        html_message = render_to_string(
+            "emails/order_status_update.html",
+            {
+                "order": order,
+                "status": status,
+                "profile_url": profile_url,
+            }
+        )
+
+        subject = f"Заказ #{order.order_number} - {order.get_status_display()}"
+        body = f"Ваш заказ #{order.order_number} обновлён до статуса '{order.get_status_display()}'"
+
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body=body,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[order.user.email]
+        )
+        email.attach_alternative(html_message, "text/html")
+        email.send(fail_silently=True)
     except Exception:
         pass
 
