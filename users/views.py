@@ -304,16 +304,19 @@ class PasswordResetView(APIView):
             thread.daemon = True
             thread.start()
 
-            return Response({"message": "Инструкции отправлены на email"})
+            return Response({
+                "message": "Инструкции отправлены на email",
+                "reset_token": str(activation.token)  # Frontend bonus
+            })
         except User.DoesNotExist:
             return Response({"message": "Инструкции отправлены на email"})
 
     def send_reset_email_async(self, user, token):
         try:
-            confirm_url = f"{settings.FRONTEND_URL}/reset-password/{token}/"
+            reset_url = f"{settings.SITE_URL_CLIENT}/?reset_token={token}"
             html_message = render_to_string("users/password_reset.html", {
                 "first_name": user.first_name,
-                "confirm_url": confirm_url
+                "reset_url": reset_url
             })
 
             email = EmailMultiAlternatives(
@@ -335,9 +338,12 @@ class PasswordResetConfirmView(APIView):
         try:
             activation = EmailActivation.objects.get(token=uuid.UUID(token))
             if activation.is_expired():
-                return Response({"detail": "Ссылка истекла"}, status=400)
+                return Response({"detail": "Ссылка истекла"}, status=status.HTTP_400_BAD_REQUEST)
 
             new_password = request.data.get('new_password')
+            if not new_password:
+                return Response({"detail": "Укажите новый пароль"}, status=status.HTTP_400_BAD_REQUEST)
+
             validate_password(new_password)
 
             user = activation.user
@@ -353,9 +359,10 @@ class PasswordResetConfirmView(APIView):
 
             Token.objects.filter(user=user).delete()
             activation.delete()
-            return Response({"message": "Пароль сброшен"})
+
+            return Response({"message": "Пароль успешно сброшен"})
         except (EmailActivation.DoesNotExist, ValueError, ValidationError):
-            return Response({"detail": "Неверная ссылка"}, status=400)
+            return Response({"detail": "Неверная ссылка"}, status=status.HTTP_400_BAD_REQUEST)
 
     def send_password_changed_email_async(self, user):
         try:
@@ -369,5 +376,5 @@ class PasswordResetConfirmView(APIView):
             )
             email.attach_alternative(html_message, "text/html")
             email.send(fail_silently=True)
-        except:
+        except Exception:
             pass
