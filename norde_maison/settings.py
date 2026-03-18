@@ -7,7 +7,7 @@ SECRET_KEY = 'django-insecure-!d)e1)+(6jd9i4=)j--cdh*@wf&dyhrq99qf(loc12uxn*)u@9
 
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '*']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -16,6 +16,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_extensions',
     'rest_framework',
     'rest_framework.authtoken',
     'tinymce',
@@ -119,10 +120,12 @@ REST_FRAMEWORK = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:3000',
+    'https://127.0.0.1:8000',
+    'https://localhost:8000',
     "https://norde-maison-frontend.vercel.app"
 ]
 
-SITE_URL = "http://127.0.0.1:8000"
+SITE_URL = "https://127.0.0.1:8000"
 SITE_URL_CLIENT = "http://localhost:5173"
 # SITE_URL_CLIENT = "https://norde-maison-frontend.vercel.app"
 
@@ -151,3 +154,7 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
+
+YOOKASSA_SHOP_ID = "1305307"
+YOOKASSA_SECRET_KEY = "test_Gvf9reEgzw9GF_24Sn3tutuNxSX5q4ODJc9VfbWar14"
+YOOKASSA_RETURN_URL = f"{SITE_URL_CLIENT}/profile/"

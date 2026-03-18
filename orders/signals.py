@@ -9,7 +9,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from shop_config.models import TelegramConfig
 
-from .models import Order
+from .models import Order, OrderStatus
 
 
 def fmt_price(value, show_zero_as_free=False):
@@ -37,7 +37,7 @@ def get_status_emoji(status):
 
 @receiver(post_save, sender=Order)
 def send_order_notifications(sender, instance, created, **kwargs):
-    if created and instance.status == 'assembly':
+    if not created and instance.status == OrderStatus.ASSEMBLY:
         thread_email = threading.Thread(target=_send_order_email_async, args=(instance,))
         thread_email.daemon = True
         thread_email.start()
@@ -45,7 +45,8 @@ def send_order_notifications(sender, instance, created, **kwargs):
         thread_tg = threading.Thread(target=_send_tg_notification_async, args=(instance,))
         thread_tg.daemon = True
         thread_tg.start()
-    elif not created and instance.status != 'assembly':
+
+    elif not created and instance.status != OrderStatus.ASSEMBLY:
         thread_tg = threading.Thread(target=_send_status_update_async, args=(instance,))
         thread_tg.daemon = True
         thread_tg.start()
