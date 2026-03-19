@@ -104,6 +104,12 @@ class SubCategory(models.Model):
             self.cover_image.delete(save=False)
         super().delete(*args, **kwargs)
 
+    @property
+    def material_products(self):
+        if not self.is_material:
+            return Product.objects.none()
+        return Product.objects.filter(material__iexact=self.name, is_visible=True)
+
     def __str__(self):
         gender = self.category.get_gender_display()
         return f'[{gender}] {self.name} — {self.category.name}'

@@ -43,34 +43,18 @@ class SubCategoryListView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        qs = SubCategory.objects.select_related(
-            'category'
-        ).prefetch_related(
-            Prefetch(
-                'products',
-                queryset=Product.objects.filter(
-                    is_visible=True
-                ).prefetch_related(
-                    Prefetch(
-                        'images',
-                        queryset=ProductImage.objects.order_by('order')
-                    ),
-                    Prefetch(
-                        'variants',
-                        queryset=ProductVariant.objects.only(
-                            'id',
-                            'product_id',
-                            'color_name',
-                            'color_hex',
-                            'size',
-                            'stock'
-                        )
-                    )
-                )
-            )
-        )
-
+        qs = SubCategory.objects.select_related('category').distinct()
         params = self.request.query_params
+
+        only_materials = params.get('only_materials')
+        if only_materials and only_materials.lower() in ('1', 'true', 'yes'):
+            qs = qs.filter(is_material=True)
+            return qs.prefetch_related(
+                Prefetch('material_products',
+                         queryset=Product.objects.filter(is_visible=True)
+                         .prefetch_related('images', 'variants')
+                         )
+            ).order_by('category__order', 'order')
 
         category_id = params.get('category')
         show_on_main = params.get('show_on_main')
@@ -78,6 +62,9 @@ class SubCategoryListView(generics.ListAPIView):
 
         if category_id:
             qs = qs.filter(category_id=category_id)
+            cat = Category.objects.filter(id=category_id).first()
+            if cat and cat.name != 'Материалы':
+                qs = qs.filter(is_material=False)
 
         if show_on_main and show_on_main.lower() in ('1', 'true', 'yes'):
             qs = qs.filter(show_on_main=True)
@@ -85,12 +72,12 @@ class SubCategoryListView(generics.ListAPIView):
         if gender in ('M', 'F'):
             qs = qs.filter(category__gender=gender)
 
-        if category_id:
-            cat = Category.objects.filter(id=category_id).first()
-            if cat and cat.name != 'Материалы':
-                qs = qs.filter(is_material=False)
-
-        return qs
+        return qs.prefetch_related(
+            Prefetch('products',
+                     queryset=Product.objects.filter(is_visible=True)
+                     .prefetch_related('images', 'variants')
+                     )
+        ).order_by('order')
 
 
 class ProductListView(generics.ListAPIView):
@@ -111,6 +98,7 @@ class ProductListView(generics.ListAPIView):
         qs = Product.objects.filter(is_visible=True)
 
         subcategory_id = params.get("subcategory")
+        material_id = params.get("material")
         size_filters = params.getlist("size")
         color_filters = params.getlist("color")
 
@@ -128,6 +116,10 @@ class ProductListView(generics.ListAPIView):
 
         if subcategory_id:
             qs = qs.filter(subcategory_id=subcategory_id)
+
+        if material_id:
+            material_subcat = SubCategory.objects.get(id=material_id)
+            qs = qs.filter(material__iexact=material_subcat.name)
 
         if size_filters:
             qs = qs.filter(variants__size__in=size_filters)
@@ -180,6 +172,7 @@ class ProductListView(generics.ListAPIView):
         response.data["filters"] = filters
 
         return response
+
 
 
 class ProductDetailView(generics.RetrieveAPIView):

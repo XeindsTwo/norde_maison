@@ -18,35 +18,30 @@ class CategorySerializer(serializers.ModelSerializer):
 class SubCategorySerializer(serializers.ModelSerializer):
     category = CategorySerializer(read_only=True)
     products = serializers.SerializerMethodField()
+    products_count = serializers.SerializerMethodField()
 
     class Meta:
         model = SubCategory
         fields = (
-            'id',
-            'name',
-            'size_model',
-            'cover_image',
-            'show_on_main',
-            'is_material',
-            'description',
-            'order',
-            'category',
-            'products',
+            'id', 'name', 'size_model', 'cover_image', 'show_on_main',
+            'is_material', 'description', 'order', 'category',
+            'products', 'products_count'
         )
 
     def get_products(self, obj):
-        products = obj.products.filter(
-            is_visible=True
-        ).prefetch_related(
-            'images',
-            'variants'
-        )
+        request = self.context.get("request")
 
-        return ProductListSerializer(
-            products,
-            many=True,
-            context=self.context
-        ).data
+        if obj.is_material:
+            products = obj.material_products.all()
+        else:
+            products = obj.products.filter(is_visible=True)
+
+        return ProductListSerializer(products, many=True, context=self.context).data
+
+    def get_products_count(self, obj):
+        if obj.is_material:
+            return obj.material_products.count()
+        return obj.products.filter(is_visible=True).count()
 
 
 class ProductImageSerializer(serializers.ModelSerializer):
