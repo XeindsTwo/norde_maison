@@ -6,7 +6,8 @@ from .views import (
     OrderHistoryView,
     OrderPreviewView,
     OrderStatusView,
-    PaymentStatusView
+    PaymentStatusView,
+    CurrentPendingOrderView
 )
 
 urlpatterns = [
@@ -15,6 +16,7 @@ urlpatterns = [
     path("<str:order_number>/status/", OrderStatusView.as_view(), name="order-status"),
     path("payment/<str:payment_id>/status/", PaymentStatusView.as_view(), name="payment-status"),
     path("checkout/", CheckoutView.as_view(), name="checkout"),
+    path("checkout/current-pending/", CurrentPendingOrderView.as_view(), name="current-pending-order"),
     path("history/", OrderHistoryView.as_view(), name="order-history"),
     path("preview/", OrderPreviewView.as_view(), name="order-preview"),
 ]

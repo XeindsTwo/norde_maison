@@ -8,8 +8,7 @@ class OrdersConfig(AppConfig):
 
     def ready(self):
         import orders.signals
-        thread = threading.Thread(
-            target=orders.signals.check_pending_orders_periodically,
-            daemon=True
-        )
-        thread.start()
+
+        if not hasattr(self, "_started"):
+            self._started = True
+            orders.signals.check_pending_orders_periodically()

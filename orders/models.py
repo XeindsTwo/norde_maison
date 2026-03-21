@@ -67,6 +67,7 @@ class Order(models.Model):
     delivery_extra = JSONField(blank=True, null=True, verbose_name="Доп. данные доставки")
     comment = models.TextField(blank=True, verbose_name="Комментарий")
     notified = models.BooleanField(default=False)
+    payment_verified = models.BooleanField(default=False)
     delivery_price = models.DecimalField(
         max_digits=12,
         decimal_places=2,

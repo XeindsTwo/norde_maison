@@ -178,9 +178,23 @@ class UserOrderHistoryView(ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user).prefetch_related(
+        user = self.request.user
+        orders = Order.objects.filter(user=user).prefetch_related(
             'items__variant__product'
         ).order_by('-created_at')[:10]
+
+        result = []
+        for order in orders:
+            if order.status == "pending" and order.payment_id:
+                try:
+                    from orders.yookassa_utils import check_payment_status
+                    paid = check_payment_status(order.payment_id)
+                    if not paid:
+                        continue
+                except Exception:
+                    continue
+            result.append(order)
+        return result
 
 
 class MeView(APIView):

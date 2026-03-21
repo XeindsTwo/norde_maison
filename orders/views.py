@@ -14,6 +14,9 @@ from .models import Order, OrderItem, OrderStatus
 from .serializers import CheckoutSerializer, OrderSerializer, OrderPreviewSerializer
 from .utils.yookassa import create_payment
 from .utils.exchange_rates import convert_to_rub
+from django.utils import timezone
+from datetime import timedelta
+import threading
 
 
 def get_delivery_price(region, delivery_method, total_price_rub, currency):
@@ -26,8 +29,12 @@ def get_delivery_price(region, delivery_method, total_price_rub, currency):
 
     price = getattr(region, price_field)
     free_from = getattr(region, free_from_field)
-
     return Decimal("0.00") if total_price_rub >= free_from else price
+
+
+def check_payment_status(payment_id):
+    payment = yookassa.Payment.find_one(payment_id)
+    return payment.status == "succeeded"
 
 
 class CheckoutPaymentView(APIView):
@@ -118,7 +125,7 @@ class CheckoutPaymentView(APIView):
 
         payment = create_payment(order)
         order.payment_id = payment.id
-        order.save()
+        order.save(update_fields=["payment_id"])
 
         return Response({
             "payment_url": payment.confirmation.confirmation_url,
@@ -140,7 +147,14 @@ class YookassaWebhookView(APIView):
             try:
                 order = Order.objects.get(payment_id=payment_id, status=OrderStatus.PENDING)
                 order.status = OrderStatus.ASSEMBLY
+                order.payment_verified = True
                 order.save()
+
+                from .signals import _send_order_email_async, _send_tg_notification_async
+                import threading
+
+                threading.Thread(target=_send_order_email_async, args=(order,), daemon=True).start()
+                threading.Thread(target=_send_tg_notification_async, args=(order,), daemon=True).start()
             except Order.DoesNotExist:
                 pass
 
@@ -300,28 +314,20 @@ class PaymentStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, payment_id):
-        print(f"🔍 PaymentStatusView: checking payment_id={payment_id}")
         status = check_payment_status(payment_id)
         if status:
             try:
                 order = Order.objects.get(payment_id=payment_id, status=OrderStatus.PENDING)
                 order.status = OrderStatus.ASSEMBLY
-                order.save(update_fields=['status'])
-                print(f"✅ PaymentStatusView: updated order {order.order_number} to ASSEMBLY")
+                order.payment_verified = True
+                order.notified = True
+                order.save(update_fields=['status', 'payment_verified', 'notified'])
 
-                from .signals import _send_order_email_async, _send_tg_notification_async
-                import threading
-
-                t_email = threading.Thread(target=_send_order_email_async, args=(order,))
-                t_email.daemon = True
-                t_email.start()
-
-                t_tg = threading.Thread(target=_send_tg_notification_async, args=(order,))
-                t_tg.daemon = True
-                t_tg.start()
+                threading.Thread(target=_send_order_email_async, args=(order,), daemon=True).start()
+                threading.Thread(target=_send_tg_notification_async, args=(order,), daemon=True).start()
 
             except Order.DoesNotExist:
-                print(f"❌ PaymentStatusView: order not found for payment_id={payment_id}")
+                pass
         return Response({"succeeded": status})
 
 
@@ -331,13 +337,46 @@ class OrderStatusView(APIView):
     def get(self, request, order_number):
         try:
             order = Order.objects.get(user=request.user, order_number=order_number)
-            if order.status == OrderStatus.PENDING and order.payment_id:
-                print(f"🔍 OrderStatusView: checking payment for order {order_number}")
-                payment_status = check_payment_status(order.payment_id)
-                if payment_status:
-                    order.status = OrderStatus.ASSEMBLY
-                    order.save(update_fields=['status'])
-                    print(f"✅ OrderStatusView: updated order {order_number} to ASSEMBLY")
-            return Response({'status': order.status})
+            return Response({"status": order.status})
         except Order.DoesNotExist:
-            return Response({'status': 'not_found'}, status=404)
+            return Response({"status": "not_found"}, status=404)
+
+
+class CurrentPendingOrderView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        now = timezone.now()
+        order = Order.objects.filter(
+            user=user,
+            status=OrderStatus.PENDING,
+            created_at__gte=now - timedelta(minutes=10),
+            payment_verified=False
+        ).first()
+
+        if not order:
+            return Response({"has_pending": False})
+
+        expires_in_seconds = max(0, int((order.created_at + timedelta(minutes=10) - now).total_seconds()))
+
+        payment_url = None
+        if order.payment_id:
+            try:
+                payment = yookassa.Payment.find_one(order.payment_id)
+                payment_url = payment.confirmation.confirmation_url
+            except:
+                payment = create_payment(order)
+                order.payment_id = payment.id
+                order.save(update_fields=["payment_id"])
+                payment_url = payment.confirmation.confirmation_url
+
+        return Response({
+            "has_pending": True,
+            "order_number": order.order_number,
+            "payment_id": order.payment_id,
+            "total_price": order.total_price,
+            "created_at": order.created_at,
+            "expires_in_seconds": expires_in_seconds,
+            "payment_url": payment_url
+        })

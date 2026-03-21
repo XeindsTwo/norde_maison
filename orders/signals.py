@@ -1,6 +1,7 @@
 import threading
 import requests
 import time
+import yookassa
 from datetime import timedelta
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -11,7 +12,6 @@ from django.utils import timezone
 from django.conf import settings
 from shop_config.models import TelegramConfig
 from .models import Order, OrderStatus
-from .utils.yookassa import check_payment_status
 
 
 def fmt_price(value, show_zero_as_free=False):
@@ -41,7 +41,7 @@ def _send_order_email_async(order):
             to=[order.user.email]
         )
         email.attach_alternative(html, "text/html")
-        email.send(fail_silently=False)
+        email.send(fail_silently=True)
     except:
         pass
 
@@ -73,7 +73,7 @@ def _send_tg_notification_async(order):
         config = TelegramConfig.load()
         if not config.bot_token or not config.group_id:
             return
-        fio = " ".join(filter(None, [order.first_name, order.last_name, order.middle_name]))
+        fio = " ".join(filter(None, [order.first_name, order.last_name, order.middle_name])) or "Не указано"
         items_text = ""
         total_items_price = 0
         for item in order.items.all():
@@ -94,7 +94,7 @@ def _send_tg_notification_async(order):
 <b>📋 ТОВАРЫ ({len(order.items.all())} шт)</b>
 {items_text}<b>🧾 Итого товары:</b> {fmt_price(total_items_price)}
 
-<b>👤 ФИО:</b> {fio or 'Не указано'}
+<b>👤 ФИО:</b> {fio}
 <b>📞 Телефон:</b> {order.phone or 'Не указан'}
 <b>📱 Telegram:</b> {order.telegram or 'Не указан'}
 
@@ -163,49 +163,68 @@ def _send_pending_tg_async(order):
 @receiver(post_save, sender=Order)
 def order_status_change(sender, instance, created, **kwargs):
     if created:
-        if instance.status == OrderStatus.PENDING and not instance.payment_id:
-            t = threading.Thread(target=_send_pending_tg_async, args=(instance,))
-            t.daemon = True
-            t.start()
-        elif instance.payment_id and instance.status == OrderStatus.ASSEMBLY:
-            t_email = threading.Thread(target=_send_order_email_async, args=(instance,))
-            t_email.daemon = True
-            t_email.start()
-            t_tg = threading.Thread(target=_send_tg_notification_async, args=(instance,))
-            t_tg.daemon = True
-            t_tg.start()
-            instance.notified = True
-            instance.save(update_fields=["notified"])
+        if instance.status == OrderStatus.PENDING:
+            threading.Thread(target=_send_pending_tg_async, args=(instance,), daemon=True).start()
         return
 
-    if instance.status != OrderStatus.PENDING and not getattr(instance, "notified", False):
-        t_email = threading.Thread(target=_send_status_email_async, args=(instance, instance.status))
-        t_email.daemon = True
-        t_email.start()
-        t_tg = threading.Thread(target=_send_status_update_async, args=(instance,))
-        t_tg.daemon = True
-        t_tg.start()
-        instance.notified = True
-        instance.save(update_fields=["notified"])
+    if instance.payment_verified and instance.status == OrderStatus.ASSEMBLY:
+        return
+
+    if instance.status in [OrderStatus.ASSEMBLY, OrderStatus.IN_WAY, OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
+        if not instance.notified:
+            threading.Thread(target=_send_status_email_async, args=(instance, instance.status), daemon=True).start()
+            threading.Thread(target=_send_status_update_async, args=(instance,), daemon=True).start()
+            instance.notified = True
+            instance.save(update_fields=["notified"])
 
 
 def check_pending_orders_periodically():
     def run():
         while True:
             try:
-                pending_orders = Order.objects.filter(status=OrderStatus.PENDING)
-                for order in pending_orders:
-                    if order.payment_id and check_payment_status(order.payment_id):
-                        order.status = OrderStatus.ASSEMBLY
-                        order.save(update_fields=['status'])
-                    elif order.created_at < timezone.now() - timedelta(minutes=10):
+                orders = Order.objects.filter(
+                    status=OrderStatus.PENDING,
+                    payment_verified=False
+                ).prefetch_related("items__variant")
+
+                now = timezone.now()
+
+                for order in orders:
+                    if not order.payment_id:
+                        continue
+
+                    try:
+                        payment = yookassa.Payment.find_one(order.payment_id)
+                    except Exception as e:
+                        continue
+
+                    if payment.status == "succeeded":
+                        updated = Order.objects.filter(
+                            pk=order.pk,
+                            payment_verified=False
+                        ).update(
+                            status=OrderStatus.ASSEMBLY,
+                            payment_verified=True,
+                            notified=True
+                        )
+
+                        if updated:
+                            order.refresh_from_db()
+                            threading.Thread(target=_send_order_email_async, args=(order,), daemon=True).start()
+                            threading.Thread(target=_send_tg_notification_async, args=(order,), daemon=True).start()
+
+                    elif payment.status == "canceled" or order.created_at < now - timedelta(minutes=10):
                         for item in order.items.all():
                             item.variant.stock += item.quantity
                             item.variant.save()
-                        order.status = OrderStatus.CANCELLED
-                        order.save(update_fields=['status'])
-            except:
+
+                        Order.objects.filter(pk=order.pk).update(
+                            status=OrderStatus.CANCELLED
+                        )
+
+            except Exception:
                 pass
-            time.sleep(60)
+
+            time.sleep(10)
 
     threading.Thread(target=run, daemon=True).start()
