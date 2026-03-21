@@ -16,11 +16,19 @@ def create_payment(order):
         },
         "confirmation": {
             "type": "redirect",
-            "return_url": f"{settings.SITE_URL_CLIENT}/checkout/?order={order.order_number}"
+            "return_url": f"{settings.SITE_URL_CLIENT}/checkout?order={order.order_number}"
         },
         "capture": True,
         "description": f"Заказ №{order.order_number}",
-        "metadata": {"order_id": order.id},
-        "idempotence_key": idempotence_key
-    })
+        "metadata": {"order_id": order.id}
+    }, idempotence_key)
+
+    print(f"✅ create_payment: created payment_id={payment.id} for order {order.order_number}")
     return payment
+
+
+def check_payment_status(payment_id):
+    print(f"🔍 check_payment_status: querying payment_id={payment_id}")
+    payment = yookassa.Payment.find_one(payment_id)
+    print(f"📋 payment.status = {payment.status}")
+    return payment.status == "succeeded"

@@ -2,19 +2,32 @@ from decimal import Decimal
 from django.db import transaction
 from django.http import HttpResponse
 import json
+import yookassa
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-
 from cart.models import Cart
 from shop_config.models import DeliveryRegion
-
 from .models import Order, OrderItem, OrderStatus
 from .serializers import CheckoutSerializer, OrderSerializer, OrderPreviewSerializer
 from .utils.yookassa import create_payment
 from .utils.exchange_rates import convert_to_rub
+
+
+def get_delivery_price(region, delivery_method, total_price_rub, currency):
+    if delivery_method == "cdek_pvz":
+        price_field = "cdek_pvz_price"
+        free_from_field = "cdek_pvz_free_from"
+    else:
+        price_field = "cdek_courier_price"
+        free_from_field = "cdek_courier_free_from"
+
+    price = getattr(region, price_field)
+    free_from = getattr(region, free_from_field)
+
+    return Decimal("0.00") if total_price_rub >= free_from else price
 
 
 class CheckoutPaymentView(APIView):
@@ -69,7 +82,7 @@ class CheckoutPaymentView(APIView):
         except DeliveryRegion.DoesNotExist:
             return Response({"detail": "Регион не найден"}, status=400)
 
-        delivery_price_rub = self._get_delivery_price(region, delivery_method, total_price_rub, currency)
+        delivery_price_rub = get_delivery_price(region, delivery_method, total_price_rub, currency)
 
         order = Order.objects.create(
             user=user,
@@ -113,46 +126,6 @@ class CheckoutPaymentView(APIView):
             "order_number": order.order_number,
             "payment_id": payment.id
         })
-
-    def _get_delivery_price(self, region, delivery_method, total_price_rub, currency):
-        """Возвращает цену доставки в RUB с учетом бесплатной доставки"""
-        if delivery_method == "cdek_pvz":
-            base_price = self._get_region_price(region, "pvz", currency)
-            free_from = self._get_region_price(region, "pvz_free", currency)
-        elif delivery_method == "cdek_courier":
-            base_price = self._get_region_price(region, "courier", currency)
-            free_from = self._get_region_price(region, "courier_free", currency)
-        else:
-            return Decimal("0")
-
-        delivery_price_local = base_price if total_price_rub < free_from else Decimal("0")
-        return convert_to_rub(delivery_price_local, currency)
-
-    def _get_region_price(self, region, price_type, currency):
-        """Получает цену из настроек региона"""
-        if currency == "kzt":
-            price_map = {
-                "pvz": region.cdek_pvz_price_kzt,
-                "pvz_free": region.cdek_pvz_free_from_kzt,
-                "courier": region.cdek_courier_price_kzt,
-                "courier_free": region.cdek_courier_free_from_kzt,
-            }
-        elif currency == "byn":
-            price_map = {
-                "pvz": region.cdek_pvz_price_byn,
-                "pvz_free": region.cdek_pvz_free_from_byn,
-                "courier": region.cdek_courier_price_byn,
-                "courier_free": region.cdek_courier_free_from_byn,
-            }
-        else:  # rub
-            price_map = {
-                "pvz": region.cdek_pvz_price,
-                "pvz_free": region.cdek_pvz_free_from,
-                "courier": region.cdek_courier_price,
-                "courier_free": region.cdek_courier_free_from,
-            }
-
-        return price_map.get(price_type, Decimal("0"))
 
 
 class YookassaWebhookView(APIView):
@@ -226,8 +199,7 @@ class CheckoutView(APIView):
         except DeliveryRegion.DoesNotExist:
             return Response({"detail": "Регион не найден"}, status=400)
 
-        delivery_price_rub = CheckoutPaymentView()._get_delivery_price(region, delivery_method, total_price_rub,
-                                                                       currency)
+        delivery_price_rub = get_delivery_price(region, delivery_method, total_price_rub, currency)
 
         order = Order.objects.create(
             user=user,
@@ -328,14 +300,28 @@ class PaymentStatusView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, payment_id):
+        print(f"🔍 PaymentStatusView: checking payment_id={payment_id}")
         status = check_payment_status(payment_id)
         if status:
             try:
                 order = Order.objects.get(payment_id=payment_id, status=OrderStatus.PENDING)
                 order.status = OrderStatus.ASSEMBLY
-                order.save()
+                order.save(update_fields=['status'])
+                print(f"✅ PaymentStatusView: updated order {order.order_number} to ASSEMBLY")
+
+                from .signals import _send_order_email_async, _send_tg_notification_async
+                import threading
+
+                t_email = threading.Thread(target=_send_order_email_async, args=(order,))
+                t_email.daemon = True
+                t_email.start()
+
+                t_tg = threading.Thread(target=_send_tg_notification_async, args=(order,))
+                t_tg.daemon = True
+                t_tg.start()
+
             except Order.DoesNotExist:
-                pass
+                print(f"❌ PaymentStatusView: order not found for payment_id={payment_id}")
         return Response({"succeeded": status})
 
 
@@ -345,13 +331,13 @@ class OrderStatusView(APIView):
     def get(self, request, order_number):
         try:
             order = Order.objects.get(user=request.user, order_number=order_number)
-
             if order.status == OrderStatus.PENDING and order.payment_id:
+                print(f"🔍 OrderStatusView: checking payment for order {order_number}")
                 payment_status = check_payment_status(order.payment_id)
                 if payment_status:
                     order.status = OrderStatus.ASSEMBLY
-                    order.save()
-
+                    order.save(update_fields=['status'])
+                    print(f"✅ OrderStatusView: updated order {order_number} to ASSEMBLY")
             return Response({'status': order.status})
         except Order.DoesNotExist:
             return Response({'status': 'not_found'}, status=404)
