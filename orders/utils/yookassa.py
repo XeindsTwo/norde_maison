@@ -16,7 +16,7 @@ def create_payment(order):
         },
         "confirmation": {
             "type": "redirect",
-            "return_url": f"{settings.SITE_URL_CLIENT}/checkout?order={order.order_number}"
+            "return_url": f"{settings.SITE_URL_CLIENT}/profile?order_success=true&order_number={order.order_number}"
         },
         "capture": True,
         "description": f"Заказ №{order.order_number}",

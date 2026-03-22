@@ -195,35 +195,39 @@ def check_pending_orders_periodically():
 
                     try:
                         payment = yookassa.Payment.find_one(order.payment_id)
-                    except Exception as e:
+                    except Exception:
                         continue
 
                     if payment.status == "succeeded":
-                        updated = Order.objects.filter(
-                            pk=order.pk,
-                            payment_verified=False
-                        ).update(
-                            status=OrderStatus.ASSEMBLY,
-                            payment_verified=True,
-                            notified=True
-                        )
+                        if not order.payment_verified:
+                            order.status = OrderStatus.ASSEMBLY
+                            order.payment_verified = True
+                            order.notified = False
+                            order.save()
 
-                        if updated:
-                            order.refresh_from_db()
-                            threading.Thread(target=_send_order_email_async, args=(order,), daemon=True).start()
-                            threading.Thread(target=_send_tg_notification_async, args=(order,), daemon=True).start()
+                            threading.Thread(
+                                target=_send_order_email_async,
+                                args=(order,),
+                                daemon=True
+                            ).start()
+
+                            threading.Thread(
+                                target=_send_tg_notification_async,
+                                args=(order,),
+                                daemon=True
+                            ).start()
 
                     elif payment.status == "canceled" or order.created_at < now - timedelta(minutes=10):
                         for item in order.items.all():
                             item.variant.stock += item.quantity
                             item.variant.save()
 
-                        Order.objects.filter(pk=order.pk).update(
-                            status=OrderStatus.CANCELLED
-                        )
+                        order.status = OrderStatus.CANCELLED
+                        order.notified = False
+                        order.save()
 
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"check_pending_orders error: {e}")
 
             time.sleep(10)
 

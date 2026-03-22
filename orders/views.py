@@ -150,9 +150,6 @@ class YookassaWebhookView(APIView):
                 order.payment_verified = True
                 order.save()
 
-                from .signals import _send_order_email_async, _send_tg_notification_async
-                import threading
-
                 threading.Thread(target=_send_order_email_async, args=(order,), daemon=True).start()
                 threading.Thread(target=_send_tg_notification_async, args=(order,), daemon=True).start()
             except Order.DoesNotExist:
