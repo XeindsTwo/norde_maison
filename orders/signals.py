@@ -3,7 +3,8 @@ import requests
 import time
 import yookassa
 from datetime import timedelta
-from django.db.models.signals import post_save
+from django.db.models import F
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.urls import reverse
 from django.template.loader import render_to_string
@@ -139,6 +140,16 @@ def _send_status_update_async(order):
         pass
 
 
+@receiver(pre_save, sender=Order)
+def store_last_status(sender, instance, **kwargs):
+    if instance.pk:
+        try:
+            old = Order.objects.get(pk=instance.pk)
+            instance._old_status = old.status
+        except Order.DoesNotExist:
+            instance._old_status = None
+
+
 def _send_pending_tg_async(order):
     try:
         config = TelegramConfig.load()
@@ -167,15 +178,25 @@ def order_status_change(sender, instance, created, **kwargs):
             threading.Thread(target=_send_pending_tg_async, args=(instance,), daemon=True).start()
         return
 
+    old_status = getattr(instance, "_old_status", None)
+    if not old_status or old_status == instance.status:
+        return
+
     if instance.payment_verified and instance.status == OrderStatus.ASSEMBLY:
         return
 
-    if instance.status in [OrderStatus.ASSEMBLY, OrderStatus.IN_WAY, OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
-        if not instance.notified:
-            threading.Thread(target=_send_status_email_async, args=(instance, instance.status), daemon=True).start()
-            threading.Thread(target=_send_status_update_async, args=(instance,), daemon=True).start()
-            instance.notified = True
-            instance.save(update_fields=["notified"])
+    if instance.status in [OrderStatus.IN_WAY, OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
+        if old_status != instance.status:
+            threading.Thread(
+                target=_send_status_email_async,
+                args=(instance, instance.status),
+                daemon=True
+            ).start()
+            threading.Thread(
+                target=_send_status_update_async,
+                args=(instance,),
+                daemon=True
+            ).start()
 
 
 def check_pending_orders_periodically():

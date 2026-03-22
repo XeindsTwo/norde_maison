@@ -3,6 +3,7 @@ from rest_framework import serializers
 from django.contrib.auth import password_validation
 from django.contrib.auth.password_validation import validate_password
 from .models import UserProfile
+from shop_config.models import SiteConfig
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -19,6 +20,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer(read_only=True)
+    support_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
@@ -29,8 +31,12 @@ class UserSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "is_active",
-            "profile"
+            "profile",
+            "support_url"
         )
+
+    def get_support_url(self, obj):
+        return SiteConfig.load().support_url or ""
 
 
 class RegisterSerializer(serializers.ModelSerializer):
