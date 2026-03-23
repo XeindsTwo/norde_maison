@@ -132,21 +132,30 @@ class ProductImageInline(admin.TabularInline):
 class ProductVariantInline(admin.TabularInline):
     model = ProductVariant
     extra = 0
-    fields = ['color_name', 'color_hex', 'size', 'stock', 'delete_row', 'duplicate_row']
-    readonly_fields = ['delete_row', 'duplicate_row']
+    fields = ['color_name', 'color_hex', 'size', 'stock']
 
-    class Media:
-        js = ('admin/product_variant_duplicate.js',)  # подключаем JS для дублирования
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == 'size' and request.resolver_match.kwargs.get('object_id'):
+            product_id = request.resolver_match.kwargs['object_id']
 
-    def delete_row(self, obj=None):
-        return mark_safe('<span>Удалить</span>')
+            has_uni = ProductVariant.objects.filter(
+                product_id=product_id,
+                size=ProductVariant.Sizes.UNI
+            ).exists()
 
-    delete_row.short_description = 'Удалить?'
+            has_standard = ProductVariant.objects.filter(
+                product_id=product_id
+            ).exclude(size=ProductVariant.Sizes.UNI).exists()
 
-    def duplicate_row(self, obj=None):
-        return mark_safe('<button type="button" class="duplicate-row-btn">Duplicate</button>')
+            if has_uni:
+                kwargs['choices'] = [(ProductVariant.Sizes.UNI, 'UNI')]
+            elif has_standard:
+                kwargs['choices'] = [
+                    (s[0], s[1]) for s in ProductVariant.Sizes.choices
+                    if s[0] != ProductVariant.Sizes.UNI
+                ]
 
-    duplicate_row.short_description = 'Дублировать?'
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
 
 class ProductAdminForm(forms.ModelForm):
@@ -243,20 +252,17 @@ class ProductAdmin(ImageWidgetMixin, admin.ModelAdmin):
 
     main_preview.short_description = "Главное фото"
 
-
     def price_rub_display(self, obj):
         return f"{obj.price_rub} ₽" if obj.price_rub is not None else "—"
 
     price_rub_display.short_description = "RUB"
     price_rub_display.admin_order_field = "price_rub"
 
-
     def created_short(self, obj):
         return obj.created_at.strftime('%d.%m.%Y')
 
     created_short.short_description = "Создан"
     created_short.admin_order_field = "created_at"
-
 
     def colors_preview(self, obj):
         return obj.colors_preview()

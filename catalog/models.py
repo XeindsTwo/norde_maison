@@ -275,10 +275,22 @@ class ProductVariant(models.Model):
     def clean(self):
         super().clean()
         size_model = self.product.subcategory.size_model
+
         if size_model == SubCategory.SizeModel.UNI and self.size != ProductVariant.Sizes.UNI:
-            raise ValidationError({'size': 'Для этой подкатегории допускается только размер UNI.'})
+            raise ValidationError({'size': 'Для этой подкатегории только UNI!'})
+
         if size_model == SubCategory.SizeModel.STANDARD and self.size == ProductVariant.Sizes.UNI:
-            raise ValidationError({'size': 'Для стандартной модели размеров UNI использовать нельзя.'})
+            raise ValidationError({'size': 'Стандартная модель — без UNI!'})
+
+        if self.pk is None:
+            uni_exists = ProductVariant.objects.filter(
+                product=self.product,
+                size=ProductVariant.Sizes.UNI
+            ).exists()
+            if uni_exists and self.size != ProductVariant.Sizes.UNI:
+                raise ValidationError({
+                    'size': f'Уже есть UNI вариант! Только UNI допустим.'
+                })
 
     def __str__(self):
         return f'{self.product.name} / {self.color_name} / {self.size}'
