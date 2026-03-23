@@ -2,6 +2,7 @@ from rest_framework import serializers
 from .models import Order, OrderItem
 from shop_config.models import DeliveryRegion
 
+
 class CheckoutSerializer(serializers.Serializer):
     first_name = serializers.CharField()
     last_name = serializers.CharField()
@@ -16,10 +17,12 @@ class CheckoutSerializer(serializers.Serializer):
     delivery_extra = serializers.DictField(required=False, allow_empty=True)
     address = serializers.CharField(required=False, allow_blank=True)
 
+
 class OrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = OrderItem
         fields = ("product_name", "color", "size", "quantity", "price_snapshot")
+
 
 class OrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
@@ -32,6 +35,7 @@ class OrderSerializer(serializers.ModelSerializer):
             "address", "delivery_extra", "comment", "total_price",
             "delivery_price", "created_at", "items"
         )
+
 
 class DeliveryRegionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -46,6 +50,7 @@ class DeliveryRegionSerializer(serializers.ModelSerializer):
             "cdek_courier_price_byn", "cdek_courier_free_from_byn",
         )
 
+
 class OrderPreviewItemSerializer(serializers.Serializer):
     product_id = serializers.IntegerField()
     product_name = serializers.CharField()
@@ -57,6 +62,7 @@ class OrderPreviewItemSerializer(serializers.Serializer):
     price_byn = serializers.DecimalField(max_digits=12, decimal_places=2)
     image_url = serializers.CharField(allow_null=True)
 
+
 class OrderPreviewSerializer(serializers.Serializer):
     items = OrderPreviewItemSerializer(many=True)
     subtotal_rub = serializers.DecimalField(max_digits=12, decimal_places=2)
@@ -64,6 +70,7 @@ class OrderPreviewSerializer(serializers.Serializer):
     subtotal_byn = serializers.DecimalField(max_digits=12, decimal_places=2)
     delivery_regions = DeliveryRegionSerializer(many=True)
     delivery_method_choices = serializers.ListField(child=serializers.CharField())
+
 
 class OrderItemDetailSerializer(serializers.ModelSerializer):
     variant_id = serializers.IntegerField(source='variant.id')
@@ -87,18 +94,42 @@ class OrderItemDetailSerializer(serializers.ModelSerializer):
             return url
         return None
 
+
 class OrderDetailSerializer(serializers.ModelSerializer):
     items = OrderItemDetailSerializer(many=True, read_only=True)
     created_at = serializers.SerializerMethodField()
 
+    total_price_kzt = serializers.SerializerMethodField()
+    total_price_byn = serializers.SerializerMethodField()
+    delivery_price_kzt = serializers.SerializerMethodField()
+    delivery_price_byn = serializers.SerializerMethodField()
+
     class Meta:
         model = Order
         fields = [
-            'id', 'order_number', 'status', 'created_at', 'total_price',
-            'delivery_price', 'delivery_method', 'address', 'delivery_extra',
+            'id', 'order_number', 'status', 'created_at',
+            'total_price', 'total_price_kzt', 'total_price_byn',  # ✅
+            'delivery_price', 'delivery_price_kzt', 'delivery_price_byn',  # ✅
+            'delivery_method', 'address', 'delivery_extra',
             'comment', 'items',
             'first_name', 'last_name', 'middle_name', 'phone', 'telegram'
         ]
 
     def get_created_at(self, obj):
         return obj.created_at.strftime("%d.%m.%y")
+
+    def get_total_price_kzt(self, obj):
+        from .utils.exchange_rates import EXCHANGE_RATES
+        return obj.total_price * EXCHANGE_RATES['rub']['kzt']
+
+    def get_total_price_byn(self, obj):
+        from .utils.exchange_rates import EXCHANGE_RATES
+        return obj.total_price * EXCHANGE_RATES['rub']['byn']
+
+    def get_delivery_price_kzt(self, obj):
+        from .utils.exchange_rates import EXCHANGE_RATES
+        return obj.delivery_price * EXCHANGE_RATES['rub']['kzt']
+
+    def get_delivery_price_byn(self, obj):
+        from .utils.exchange_rates import EXCHANGE_RATES
+        return obj.delivery_price * EXCHANGE_RATES['rub']['byn']

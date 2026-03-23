@@ -216,19 +216,21 @@ class ProductDetailSerializer(serializers.ModelSerializer):
 
     # ---------- Sizes ----------
     def get_sizes(self, obj):
-        size_map = {}
+        SIZE_ORDER = {
+            ProductVariant.Sizes.XXS: 0, ProductVariant.Sizes.XS: 1,
+            ProductVariant.Sizes.S: 2, ProductVariant.Sizes.M: 3,
+            ProductVariant.Sizes.L: 4, ProductVariant.Sizes.XL: 5,
+            ProductVariant.Sizes.XXL: 6, ProductVariant.Sizes.UNI: 7,
+        }
 
+        size_map = {}
         for v in obj.variants.all():
             size_map.setdefault(v.size, 0)
             size_map[v.size] += v.stock
 
-        return [
-            {
-                "size": size,
-                "stock": stock
-            }
-            for size, stock in size_map.items()
-        ]
+        sorted_sizes = sorted(size_map.items(), key=lambda x: SIZE_ORDER.get(x[0], 99))
+
+        return [{"size": size, "stock": stock} for size, stock in sorted_sizes]
 
     # ---------- Similar Products ----------
     def get_similar_products(self, obj):

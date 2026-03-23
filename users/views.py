@@ -196,6 +196,11 @@ class UserOrderHistoryView(ListAPIView):
             result.append(order)
         return result
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context['currency'] = self.request.query_params.get('currency', 'rub')
+        return context
+
 
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
