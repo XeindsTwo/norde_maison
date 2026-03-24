@@ -7,7 +7,15 @@ SECRET_KEY = 'django-insecure-!d)e1)+(6jd9i4=)j--cdh*@wf&dyhrq99qf(loc12uxn*)u@9
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost', '*']
+ALLOWED_HOSTS = [
+  '62.60.237.139',
+  'localhost',
+  '127.0.0.1',
+  "morphism.pro",
+  "www.morphism.pro",
+  "nordemaison.shop",
+  "www.nordemaison.shop",
+]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -71,7 +79,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'norde_maison',
         'USER': 'postgres',
-        'PASSWORD': 'xeindstwo',
+        'PASSWORD': 'admin',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -125,9 +133,20 @@ CORS_ALLOWED_ORIGINS = [
     "https://norde-maison-frontend.vercel.app"
 ]
 
-SITE_URL = "https://127.0.0.1:8000"
-SITE_URL_CLIENT = "http://localhost:5173"
-# SITE_URL_CLIENT = "https://norde-maison-frontend.vercel.app"
+CSRF_TRUSTED_ORIGINS = [
+    "https://morphism.pro",
+    "https://www.morphism.pro",
+    "https://nordemaison.shop",
+    "https://www.nordemaison.shop",
+]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+#SITE_URL = "https://127.0.0.1:8000"
+SITE_URL = "https://nordemaison.shop"
+
+#SITE_URL_CLIENT = "http://localhost:5173"
+SITE_URL_CLIENT = "https://norde-maison-frontend.vercel.app"
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
@@ -158,3 +177,6 @@ MEDIA_URL = "/media/"
 YOOKASSA_SHOP_ID = "1305307"
 YOOKASSA_SECRET_KEY = "test_Gvf9reEgzw9GF_24Sn3tutuNxSX5q4ODJc9VfbWar14"
 YOOKASSA_RETURN_URL = f"{SITE_URL_CLIENT}/profile/"
+
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
