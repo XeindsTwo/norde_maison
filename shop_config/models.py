@@ -25,9 +25,9 @@ class DeliveryRegion(models.Model):
     code = models.CharField(max_length=2, choices=REGIONS, unique=True, verbose_name="Страна")
 
     # RUB
-    cdek_pvz_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="ПВЗ — цена (₽)")
+    cdek_pvz_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="ПВЗ — цена (₽)", default=0)
     cdek_pvz_free_from = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="ПВЗ — бесплатно от (₽)")
-    cdek_courier_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Курьер — цена (₽)")
+    cdek_courier_price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Курьер — цена (₽)", default=0)
     cdek_courier_free_from = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Курьер — бесплатно от (₽)")
 
     # KZT

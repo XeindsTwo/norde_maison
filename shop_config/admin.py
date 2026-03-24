@@ -68,22 +68,30 @@ class DeliveryRegionAdmin(admin.ModelAdmin):
     courier_display.short_description = "Курьер CDEK"
 
     def get_fieldsets(self, request, obj=None):
-        code = obj.code if obj else None
+        if obj is None:
+            return (
+                ("Регион", {"fields": ("code",)}),
+            )
 
-        if code == "RU":
+        if obj.code == "RU":
             symbol = "₽"
             pvz_price, pvz_free = "cdek_pvz_price", "cdek_pvz_free_from"
             courier_price, courier_free = "cdek_courier_price", "cdek_courier_free_from"
-        elif code == "KZ":
+
+        elif obj.code == "KZ":
             symbol = "₸"
             pvz_price, pvz_free = "cdek_pvz_price_kzt", "cdek_pvz_free_from_kzt"
             courier_price, courier_free = "cdek_courier_price_kzt", "cdek_courier_free_from_kzt"
-        elif code == "BY":
+
+        elif obj.code == "BY":
             symbol = "Br"
             pvz_price, pvz_free = "cdek_pvz_price_byn", "cdek_pvz_free_from_byn"
             courier_price, courier_free = "cdek_courier_price_byn", "cdek_courier_free_from_byn"
+
         else:
-            return (("Регион", {"fields": ("code",)}),)
+            return (
+                ("Регион", {"fields": ("code",)}),
+            )
 
         return (
             ("Регион", {"fields": ("code",)}),
