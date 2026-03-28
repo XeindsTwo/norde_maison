@@ -21,3 +21,5 @@ media_seed/
 # OS
 .DS_Store
 Thumbs.db
+
+norde_maison/settings.py

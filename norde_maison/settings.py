@@ -79,7 +79,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'norde_maison',
         'USER': 'postgres',
-        'PASSWORD': 'admin',
+        'PASSWORD': 'xeindstwo',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -145,8 +145,8 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 #SITE_URL = "https://127.0.0.1:8000"
 SITE_URL = "https://nordemaison.shop"
 
-#SITE_URL_CLIENT = "http://localhost:5173"
-SITE_URL_CLIENT = "https://norde-maison-frontend.vercel.app"
+SITE_URL_CLIENT = "http://localhost:5173"
+#SITE_URL_CLIENT = "https://norde-maison-frontend.vercel.app"
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 

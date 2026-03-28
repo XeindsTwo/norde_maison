@@ -1,5 +1,4 @@
 import uuid
-
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -62,6 +61,38 @@ class EmailActivation(models.Model):
 
     def __str__(self):
         return f"Activation: {self.user.username}"
+
+
+class PasswordResetToken(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name="password_reset_token"
+    )
+
+    token = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True
+    )
+
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    used_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+
+    def is_expired(self):
+        return timezone.now() > self.created_at + timezone.timedelta(hours=24)
+
+    def mark_used(self):
+        self.used_at = timezone.now()
+        self.save(update_fields=["used_at"])
+
+    def __str__(self):
+        return f"PasswordResetToken: {self.user.username}"
 
 
 @receiver(post_save, sender=User)

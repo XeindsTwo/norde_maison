@@ -11,12 +11,19 @@ from django.template.loader import render_to_string
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
 from django.shortcuts import render
-from .models import EmailActivation, UserProfile
+from .models import EmailActivation, UserProfile, PasswordResetToken
 from .serializers import (
-    RegisterSerializer, UserSerializer, ProfileUpdateSerializer, ChangePasswordSerializer
+    RegisterSerializer,
+    UserSerializer,
+    ProfileUpdateSerializer,
+    ChangePasswordSerializer,
+    PasswordResetSerializer,
 )
 from orders.models import Order
 from orders.serializers import OrderDetailSerializer
+from secrets import compare_digest
+from django.core.exceptions import ValidationError
+from django.contrib.auth.password_validation import validate_password
 
 
 def format_validation_error(error):
@@ -305,95 +312,130 @@ class PasswordResetView(APIView):
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        email = serializer.validated_data['email'].lower()
+        email = serializer.validated_data["email"].strip().lower()
 
         try:
             user = User.objects.get(username__iexact=email)
-            if not user.is_active:
-                return Response({"detail": "Сначала подтвердите email"}, status=status.HTTP_400_BAD_REQUEST)
-
-            activation, _ = EmailActivation.objects.get_or_create(user=user)
-            activation.token = uuid.uuid4()
-            activation.save()
-
-            thread = threading.Thread(
-                target=self.send_reset_email_async,
-                args=(user, str(activation.token))
-            )
-            thread.daemon = True
-            thread.start()
-
-            return Response({
-                "message": "Инструкции отправлены на email",
-                "reset_token": str(activation.token)  # Frontend bonus
-            })
         except User.DoesNotExist:
-            return Response({"message": "Инструкции отправлены на email"})
+            return Response(
+                {"message": "Если адрес существует, инструкции отправлены на email"},
+                status=status.HTTP_200_OK
+            )
 
-    def send_reset_email_async(self, user, token):
+        if not user.is_active:
+            return Response(
+                {"detail": "Сначала подтвердите email"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        token_obj, _ = PasswordResetToken.objects.update_or_create(
+            user=user,
+            defaults={"token": uuid.uuid4(), "used_at": None}
+        )
+
+        thread = threading.Thread(
+            target=self.send_reset_email_async,
+            args=(user.id, str(token_obj.token)),
+            daemon=True
+        )
+        thread.start()
+
+        return Response(
+            {"message": "Если адрес существует, инструкции отправлены на email"},
+            status=status.HTTP_200_OK
+        )
+
+    def send_reset_email_async(self, user_id, token):
         try:
+            user = User.objects.get(id=user_id)
             reset_url = f"{settings.SITE_URL_CLIENT}/?reset_token={token}"
-            html_message = render_to_string("users/password_reset.html", {
+
+            context = {
                 "first_name": user.first_name,
-                "reset_url": reset_url
-            })
+                "reset_url": reset_url,
+            }
+
+            html_body = render_to_string("users/password_reset.html", context)
 
             email = EmailMultiAlternatives(
                 subject="Сброс пароля — Norde Maison",
-                body="Перейдите по ссылке для сброса пароля",
+                body="Перейдите по ссылке для смены пароля.",
                 from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[user.email]
+                to=[user.email],
             )
-            email.attach_alternative(html_message, "text/html")
-            email.send(fail_silently=True)
-        except Exception:
-            pass
+            email.attach_alternative(html_body, "text/html")
+            email.send(fail_silently=False)
+
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            print("RESET EMAIL ERROR:", repr(e))
+            raise
 
 
 class PasswordResetConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def post(self, request, token):
-        try:
-            activation = EmailActivation.objects.get(token=uuid.UUID(token))
-            if activation.is_expired():
-                return Response({"detail": "Ссылка истекла"}, status=status.HTTP_400_BAD_REQUEST)
+        print("CONFIRM HIT")
+        print("URL TOKEN:", token)
+        print("REQUEST DATA:", request.data)
 
-            new_password = request.data.get('new_password')
-            if not new_password:
-                return Response({"detail": "Укажите новый пароль"}, status=status.HTTP_400_BAD_REQUEST)
+        new_password = request.data.get("new_password", "").strip()
+        confirm_password = request.data.get("confirm_password", "").strip()
 
-            validate_password(new_password)
-
-            user = activation.user
-            user.set_password(new_password)
-            user.save()
-
-            thread = threading.Thread(
-                target=self.send_password_changed_email_async,
-                args=(user,)
+        if not new_password or not confirm_password:
+            return Response(
+                {"detail": "Заполните оба поля"},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            thread.daemon = True
-            thread.start()
 
-            Token.objects.filter(user=user).delete()
-            activation.delete()
-
-            return Response({"message": "Пароль успешно сброшен"})
-        except (EmailActivation.DoesNotExist, ValueError, ValidationError):
-            return Response({"detail": "Неверная ссылка"}, status=status.HTTP_400_BAD_REQUEST)
-
-    def send_password_changed_email_async(self, user):
-        try:
-            html_message = render_to_string("users/password_changed.html", {
-                "first_name": user.first_name
-            })
-            email = EmailMultiAlternatives(
-                "Пароль успешно изменён — Norde Maison",
-                "Пароль от вашего аккаунта обновлён",
-                settings.DEFAULT_FROM_EMAIL, [user.email]
+        if new_password != confirm_password:
+            return Response(
+                {"detail": "Пароли не совпадают"},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            email.attach_alternative(html_message, "text/html")
-            email.send(fail_silently=True)
-        except Exception:
-            pass
+
+        try:
+            reset_token = PasswordResetToken.objects.select_related("user").get(
+                token=uuid.UUID(token)
+            )
+        except (PasswordResetToken.DoesNotExist, ValueError):
+            return Response(
+                {"detail": "Неверная или устаревшая ссылка"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if reset_token.used_at is not None:
+            return Response(
+                {"detail": "Неверная или устаревшая ссылка"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if reset_token.is_expired():
+            return Response(
+                {"detail": "Ссылка истекла"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = reset_token.user
+
+        try:
+            validate_password(new_password, user=user)
+        except ValidationError as e:
+            return Response(
+                {"detail": e.messages[0]},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        Token.objects.filter(user=user).delete()
+        reset_token.mark_used()
+        reset_token.delete()
+
+        return Response(
+            {"message": "Пароль успешно изменён"},
+            status=status.HTTP_200_OK
+        )
