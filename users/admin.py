@@ -12,7 +12,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from .models import UserProfile, EmailActivation
+from .models import UserProfile, EmailActivation, PasswordResetToken
 
 
 class UserProfileInline(admin.StackedInline):
@@ -26,7 +26,6 @@ class UserAdmin(BaseUserAdmin):
     save_on_top = True
     inlines = [UserProfileInline]
     readonly_fields = ("password",)
-
     change_form_template = "admin/users/user/change_form.html"
 
     list_display = (
@@ -85,6 +84,7 @@ class UserAdmin(BaseUserAdmin):
     def reset_password_action(self, obj):
         url = reverse("admin:auth_user_send_reset_password", args=[obj.pk])
         return format_html('<a class="button" href="{}">Сброс пароля</a>', url)
+
     reset_password_action.short_description = "Действие"
 
     def send_reset_password_view(self, request, user_id):
@@ -102,11 +102,12 @@ class UserAdmin(BaseUserAdmin):
 
     def send_reset_email(self, user):
         with transaction.atomic():
-            activation, _ = EmailActivation.objects.get_or_create(user=user)
-            activation.token = uuid.uuid4()
-            activation.save()
+            token_obj, _ = PasswordResetToken.objects.update_or_create(
+                user=user,
+                defaults={"token": uuid.uuid4(), "used_at": None}
+            )
 
-        reset_url = f"{settings.SITE_URL_CLIENT}/?reset_token={activation.token}"
+        reset_url = f"{settings.SITE_URL_CLIENT}/?reset_token={token_obj.token}"
         context = {
             "first_name": user.first_name,
             "reset_url": reset_url,
