@@ -150,14 +150,15 @@ SITE_URL_CLIENT = "http://localhost:5173"
 
 EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
-EMAIL_HOST = "smtp.yandex.com"
-EMAIL_PORT = 465
-EMAIL_USE_SSL = True
+EMAIL_HOST = "smtp.mailersend.net"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_USE_SSL = False
 
-EMAIL_HOST_USER = "alexygarnov@yandex.ru"
-EMAIL_HOST_PASSWORD = "tttglfubsolxieup"
+EMAIL_HOST_USER = "MS_L0yZs6@nordemaison.shop"
+EMAIL_HOST_PASSWORD = "mssp.xdfpsj2.o65qngkpq9olwr12.Zd6T8YL"
 
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+DEFAULT_FROM_EMAIL = "noreply@nordemaison.shop"
 
 LANGUAGE_CODE = 'ru-ru'
 TIME_ZONE = 'UTC'

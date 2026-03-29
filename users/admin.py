@@ -12,7 +12,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from .models import UserProfile, EmailActivation, PasswordResetToken
+from .models import UserProfile, PasswordResetToken
 
 
 class UserProfileInline(admin.StackedInline):
@@ -26,7 +26,6 @@ class UserAdmin(BaseUserAdmin):
     save_on_top = True
     inlines = [UserProfileInline]
     readonly_fields = ("password",)
-    change_form_template = "admin/users/user/change_form.html"
 
     list_display = (
         "username",
@@ -113,11 +112,10 @@ class UserAdmin(BaseUserAdmin):
             "reset_url": reset_url,
         }
 
-        subject = "Сброс пароля — Norde Maison"
         html_body = render_to_string("users/password_reset.html", context)
 
         email = EmailMultiAlternatives(
-            subject=subject,
+            subject="Сброс пароля — Norde Maison",
             body="Перейдите по ссылке для смены пароля.",
             from_email=settings.DEFAULT_FROM_EMAIL,
             to=[user.email],

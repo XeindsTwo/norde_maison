@@ -43,41 +43,35 @@ class SubCategoryListView(generics.ListAPIView):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        qs = SubCategory.objects.select_related('category').distinct()
         params = self.request.query_params
 
-        only_materials = params.get('only_materials')
-        if only_materials and only_materials.lower() in ('1', 'true', 'yes'):
-            qs = qs.filter(is_material=True)
-            return qs.prefetch_related(
-                Prefetch('material_products',
-                         queryset=Product.objects.filter(is_visible=True)
-                         .prefetch_related('images', 'variants')
-                         )
-            ).order_by('category__order', 'order')
+        qs = SubCategory.objects.select_related('category')
 
+        gender = params.get('gender')
+        only_materials = params.get('only_materials')
         category_id = params.get('category')
         show_on_main = params.get('show_on_main')
-        gender = params.get('gender')
-
-        if category_id:
-            qs = qs.filter(category_id=category_id)
-            cat = Category.objects.filter(id=category_id).first()
-            if cat and cat.name != 'Материалы':
-                qs = qs.filter(is_material=False)
-
-        if show_on_main and show_on_main.lower() in ('1', 'true', 'yes'):
-            qs = qs.filter(show_on_main=True)
 
         if gender in ('M', 'F'):
             qs = qs.filter(category__gender=gender)
 
+        if only_materials and only_materials.lower() in ('1', 'true', 'yes'):
+            qs = qs.filter(is_material=True)
+        else:
+            qs = qs.filter(is_material=False)
+
+        if category_id:
+            qs = qs.filter(category_id=category_id)
+
+        if show_on_main and show_on_main.lower() in ('1', 'true', 'yes'):
+            qs = qs.filter(show_on_main=True)
+
         return qs.prefetch_related(
-            Prefetch('products',
-                     queryset=Product.objects.filter(is_visible=True)
-                     .prefetch_related('images', 'variants')
-                     )
-        ).order_by('order')
+            Prefetch(
+                'products',
+                queryset=Product.objects.filter(is_visible=True).prefetch_related('images', 'variants')
+            )
+        ).order_by('category__order', 'order')
 
 
 class ProductListView(generics.ListAPIView):
@@ -118,8 +112,16 @@ class ProductListView(generics.ListAPIView):
             qs = qs.filter(subcategory_id=subcategory_id)
 
         if material_id:
-            material_subcat = SubCategory.objects.get(id=material_id)
-            qs = qs.filter(material__iexact=material_subcat.name)
+            material_subcat = SubCategory.objects.select_related('category').get(id=material_id)
+            material_gender = material_subcat.category.gender
+
+            # Фильтруем товары:
+            # 1) по названию материала
+            # 2) по полу категории товара (чтобы совпадал с полом материала)
+            qs = qs.filter(
+                material__iexact=material_subcat.name,
+                subcategory__category__gender=material_gender
+            )
 
         if size_filters:
             qs = qs.filter(variants__size__in=size_filters)
@@ -146,22 +148,13 @@ class ProductListView(generics.ListAPIView):
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
-
         page = self.paginate_queryset(queryset)
-
         serializer = self.get_serializer(page, many=True)
 
         variants_qs = ProductVariant.objects.filter(product__in=queryset)
 
-        sizes = variants_qs.values_list(
-            "size",
-            flat=True
-        ).order_by("size").distinct()
-
-        colors = variants_qs.values(
-            "color_name",
-            "color_hex"
-        ).order_by("color_name").distinct()
+        sizes = variants_qs.values_list("size", flat=True).order_by("size").distinct()
+        colors = variants_qs.values("color_name", "color_hex").order_by("color_name").distinct()
 
         filters = {
             "sizes": list(sizes),
