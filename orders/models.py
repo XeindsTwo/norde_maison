@@ -4,24 +4,29 @@ from django.db.models import JSONField
 from django.conf import settings
 from django.utils import timezone
 
+
 class OrderStatus(models.TextChoices):
     PENDING = "pending", "Ожидает оплаты"
     ASSEMBLY = "assembly", "В сборке"
     IN_WAY = "in_way", "В пути"
     DELIVERED = "delivered", "Доставлен"
-    CANCELLED = "cancelled", "Отменен"
+    CANCELLED = "cancelled", "Отменён"
+
 
 class DeliveryMethod(models.TextChoices):
     CDEK_PVZ = "cdek_pvz", "СДЭК — пункт выдачи"
     CDEK_COURIER = "cdek_courier", "СДЭК — курьер"
+
 
 class Country(models.TextChoices):
     RU = "RU", "Российская Федерация"
     KZ = "KZ", "Казахстан"
     BY = "BY", "Беларусь"
 
+
 def generate_order_number():
     return uuid.uuid4().hex[:10].upper()
+
 
 class Order(models.Model):
     user = models.ForeignKey(
@@ -100,6 +105,7 @@ class Order(models.Model):
     def __str__(self):
         return f"№{self.order_number}"
 
+
 class OrderItem(models.Model):
     order = models.ForeignKey(
         Order,
@@ -129,3 +135,65 @@ class OrderItem(models.Model):
 
     def subtotal(self):
         return self.price_snapshot * self.quantity
+
+
+class Report(models.Model):
+    REPORT_TYPES = [
+        ("sales_by_month", "Продажи по месяцам"),
+        ("average_check", "Средний чек"),
+        ("top_products", "Популярные товары"),
+    ]
+
+    FORMAT_CHOICES = [
+        ("xlsx", "Excel"),
+    ]
+
+    STATUS_CHOICES = [
+        ("processing", "В обработке"),
+        ("ready", "Готов"),
+        ("failed", "Ошибка"),
+    ]
+
+    report_type = models.CharField(
+        max_length=50,
+        choices=REPORT_TYPES,
+        verbose_name="Тип отчёта"
+    )
+    date_from = models.DateField(verbose_name="Дата от")
+    date_to = models.DateField(verbose_name="Дата до")
+    format = models.CharField(
+        max_length=10,
+        choices=FORMAT_CHOICES,
+        default="xlsx",
+        verbose_name="Формат"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name="Создал"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name="Дата создания"
+    )
+    file = models.FileField(
+        upload_to="reports/",
+        blank=True,
+        null=True,
+        verbose_name="Файл"
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default="processing",
+        verbose_name="Статус"
+    )
+
+    def __str__(self):
+        return f"{self.get_report_type_display()} ({self.date_from} — {self.date_to})"
+
+    class Meta:
+        verbose_name = "Отчёт"
+        verbose_name_plural = "Отчёты"

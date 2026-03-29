@@ -44,7 +44,6 @@ class SubCategoryListView(generics.ListAPIView):
 
     def get_queryset(self):
         params = self.request.query_params
-
         qs = SubCategory.objects.select_related('category')
 
         gender = params.get('gender')
@@ -55,10 +54,9 @@ class SubCategoryListView(generics.ListAPIView):
         if gender in ('M', 'F'):
             qs = qs.filter(category__gender=gender)
 
-        if only_materials and only_materials.lower() in ('1', 'true', 'yes'):
-            qs = qs.filter(is_material=True)
-        else:
-            qs = qs.filter(is_material=False)
+        if only_materials is not None:
+            val = only_materials.lower() in ('1', 'true', 'yes')
+            qs = qs.filter(is_material=val)
 
         if category_id:
             qs = qs.filter(category_id=category_id)

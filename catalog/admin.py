@@ -166,9 +166,7 @@ class ProductAdminForm(forms.ModelForm):
         fields = "__all__"
 
     class Media:
-        css = {
-            'all': ('admin/custom_admin.css',)
-        }
+        css = {"all": ("admin/custom_admin.css",)}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

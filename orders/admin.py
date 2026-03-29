@@ -1,7 +1,14 @@
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.urls import path, reverse
+from django.shortcuts import render
 from django.utils.html import mark_safe
-from django.urls import reverse
-from .models import Order, OrderItem, OrderStatus
+from django.http import HttpResponse
+from django.core.files.base import ContentFile
+from django.utils import formats
+
+from .models import Order, OrderItem, OrderStatus, Report
+from .forms import ReportForm
+from .reports import generate_report_content
 
 
 def fmt_price(value):
@@ -163,23 +170,21 @@ class OrderAdmin(admin.ModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         readonly_fields = list(self.readonly_fields)
         if obj and obj.status in [OrderStatus.DELIVERED, OrderStatus.CANCELLED]:
-            # Блокируем редактирование статуса и адресных данных
             readonly_fields += [
-                'status',
-                'country',
-                'delivery_method',
-                'address',
-                'delivery_extra_display'
+                "status",
+                "country",
+                "delivery_method",
+                "address",
+                "delivery_extra_display",
             ]
         return readonly_fields
 
     def get_form(self, request, obj=None, **kwargs):
-        request._obj_instance = obj  # передаём объект в formfield_for_choice_field
+        request._obj_instance = obj
         return super().get_form(request, obj, **kwargs)
 
     def formfield_for_choice_field(self, db_field, request, **kwargs):
         if db_field.name == "status" and hasattr(request, "_obj_instance") and request._obj_instance:
-            # Убираем pending для существующих заказов
             kwargs["choices"] = [
                 (key, label) for key, label in db_field.choices if key != OrderStatus.PENDING
             ]
@@ -192,14 +197,17 @@ class OrderAdmin(admin.ModelAdmin):
             f'font-weight:600; background:{bg}; color:{color}; box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
             f'{label}</span>'
         )
+
     status_badge.short_description = "Статус"
 
     def country_short(self, obj):
         return COUNTRY_SHORT.get(obj.country, obj.country)
+
     country_short.short_description = "Страна"
 
     def user_display(self, obj):
         return str(obj.user)
+
     user_display.short_description = "Пользователь"
 
     def fio_display(self, obj):
@@ -208,29 +216,35 @@ class OrderAdmin(admin.ModelAdmin):
             parts.append(obj.middle_name)
         result = " ".join(p for p in parts if p)
         return result if result.strip() else "Не указано"
+
     fio_display.short_description = "ФИО"
 
     def phone_display(self, obj):
         return obj.phone if obj.phone else "Не указано"
+
     phone_display.short_description = "Телефон"
 
     def telegram_display(self, obj):
         return obj.telegram if obj.telegram else "Не указано"
+
     telegram_display.short_description = "Telegram"
 
     def total_price_display(self, obj):
         return fmt_price(obj.total_price)
+
     total_price_display.short_description = "Итоговая сумма"
     total_price_display.admin_order_field = "total_price"
 
     def total_price_detail(self, obj):
         return fmt_price(obj.total_price)
+
     total_price_detail.short_description = "Итоговая сумма"
 
     def delivery_price_display(self, obj):
         if obj.delivery_price == 0:
             return mark_safe('<span style="color:#10b981; font-weight:600;">Бесплатно</span>')
         return fmt_price(obj.delivery_price)
+
     delivery_price_display.short_description = "Доставка"
     delivery_price_display.admin_order_field = "delivery_price"
 
@@ -238,6 +252,7 @@ class OrderAdmin(admin.ModelAdmin):
         if obj.delivery_price == 0:
             return "Бесплатно"
         return fmt_price(obj.delivery_price)
+
     delivery_price_detail.short_description = "Стоимость доставки"
 
     def delivery_extra_display(self, obj):
@@ -252,10 +267,12 @@ class OrderAdmin(admin.ModelAdmin):
         if extra.get("apartment"):
             parts.append(f"Квартира: {extra['apartment']}")
         return mark_safe(" &nbsp;·&nbsp; ".join(parts)) if parts else "—"
+
     delivery_extra_display.short_description = "Подъезд (дом) / Этаж / Квартира"
 
     def comment_display(self, obj):
         return obj.comment if obj.comment else "Не указано"
+
     comment_display.short_description = "Комментарий"
 
     def has_add_permission(self, request):
@@ -266,3 +283,120 @@ class OrderAdmin(admin.ModelAdmin):
 
     class Media:
         css = {"all": ("admin/custom_admin.css",)}
+
+
+@admin.register(Report)
+class ReportAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "report_type",
+        "date_from",
+        "date_to",
+        "format",
+        "status_display",
+        "file",
+        "created_at_formatted",
+    )
+
+    list_filter = (
+        "report_type",
+        "format",
+        "status",
+    )
+
+    search_fields = (
+        "report_type",
+    )
+
+    readonly_fields = (
+        "created_at",
+        "created_by",
+        "file",
+        "status",
+        "format",
+    )
+
+    change_list_template = "admin/orders/report/change_list.html"
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "generate-report/",
+                self.admin_site.admin_view(self.generate_report_view),
+                name="generate_report",
+            ),
+        ]
+        return custom_urls + urls
+
+    def generate_report_view(self, request):
+        form = ReportForm(request.POST or None)
+
+        if request.method == "POST" and form.is_valid():
+            data = form.cleaned_data
+            report = None
+
+            try:
+                content_io, filename = generate_report_content(
+                    data["report_type"],
+                    data["date_from"],
+                    data["date_to"],
+                    "xlsx",
+                )
+                content_io.seek(0)
+                file_bytes = content_io.read()
+
+                report = Report.objects.create(
+                    report_type=data["report_type"],
+                    date_from=data["date_from"],
+                    date_to=data["date_to"],
+                    format="xlsx",
+                    created_by=request.user,
+                    status="processing",
+                )
+
+                report.file.save(filename, ContentFile(file_bytes), save=False)
+                report.status = "ready"
+                report.save(update_fields=["file", "status"])
+
+                response = HttpResponse(
+                    file_bytes,
+                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                response["Content-Disposition"] = f'attachment; filename="{filename}"'
+                return response
+
+            except Exception as e:
+                if report:
+                    report.status = "failed"
+                    report.save(update_fields=["status"])
+                messages.error(request, f"Ошибка генерации отчёта: {str(e)}")
+
+            context = {
+                **self.admin_site.each_context(request),
+                "title": "Сформировать отчёт",
+                "form": form,
+            }
+            return render(request, "admin/change_form.html", context)
+
+    def change_list_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["custom_button_url"] = request.path.rstrip("/") + "/generate-report/"
+        extra_context["custom_button_label"] = "Сформировать отчёт"
+        return super().change_list_view(request, extra_context=extra_context)
+
+    def created_at_formatted(self, obj):
+        return formats.date_format(obj.created_at, "d F Y")
+
+    created_at_formatted.short_description = "Дата"
+
+    def status_display(self, obj):
+        return obj.get_status_display()
+
+    status_display.short_description = "Статус"
