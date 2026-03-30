@@ -1,7 +1,6 @@
 from django import forms
 from django.contrib.admin.widgets import AdminDateWidget
 
-
 class ReportForm(forms.Form):
     REPORT_TYPES = [
         ("sales_by_month", "Продажи по месяцам"),
@@ -23,7 +22,6 @@ class ReportForm(forms.Form):
         widget=AdminDateWidget(attrs={"class": "vDateField"}),
     )
     format = forms.CharField(
-        label="Формат",
         widget=forms.HiddenInput(),
         initial="xlsx",
     )

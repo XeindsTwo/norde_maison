@@ -292,111 +292,48 @@ class ReportAdmin(admin.ModelAdmin):
         "report_type",
         "date_from",
         "date_to",
-        "format",
         "status_display",
-        "file",
+        "file_download",
+        "created_by",
         "created_at_formatted",
     )
 
-    list_filter = (
-        "report_type",
-        "format",
-        "status",
-    )
+    list_filter = ("report_type", "status")
+    search_fields = ("report_type",)
+    readonly_fields = ("created_by", "file", "status")
 
-    search_fields = (
-        "report_type",
-    )
+    def get_readonly_fields(self, request, obj=None):
+        if obj is None:
+            return tuple(f for f in self.readonly_fields if f not in ("created_by", "file", "status"))
+        return self.readonly_fields
 
-    readonly_fields = (
-        "created_at",
-        "created_by",
-        "file",
-        "status",
-        "format",
-    )
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        if obj is None:
+            for field in ("created_by", "file", "status"):
+                if field in form.base_fields:
+                    del form.base_fields[field]
+        return form
 
-    change_list_template = "admin/orders/report/change_list.html"
-
-    def has_change_permission(self, request, obj=None):
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        return request.user.is_superuser
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom_urls = [
-            path(
-                "generate-report/",
-                self.admin_site.admin_view(self.generate_report_view),
-                name="generate_report",
-            ),
-        ]
-        return custom_urls + urls
-
-    def generate_report_view(self, request):
-        form = ReportForm(request.POST or None)
-
-        if request.method == "POST" and form.is_valid():
-            data = form.cleaned_data
-            report = None
-
-            try:
-                content_io, filename = generate_report_content(
-                    data["report_type"],
-                    data["date_from"],
-                    data["date_to"],
-                    "xlsx",
-                )
-                content_io.seek(0)
-                file_bytes = content_io.read()
-
-                report = Report.objects.create(
-                    report_type=data["report_type"],
-                    date_from=data["date_from"],
-                    date_to=data["date_to"],
-                    format="xlsx",
-                    created_by=request.user,
-                    status="processing",
-                )
-
-                report.file.save(filename, ContentFile(file_bytes), save=False)
-                report.status = "ready"
-                report.save(update_fields=["file", "status"])
-
-                response = HttpResponse(
-                    file_bytes,
-                    content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                )
-                response["Content-Disposition"] = f'attachment; filename="{filename}"'
-                return response
-
-            except Exception as e:
-                if report:
-                    report.status = "failed"
-                    report.save(update_fields=["status"])
-                messages.error(request, f"Ошибка генерации отчёта: {str(e)}")
-
-            context = {
-                **self.admin_site.each_context(request),
-                "title": "Сформировать отчёт",
-                "form": form,
-            }
-            return render(request, "admin/change_form.html", context)
-
-    def change_list_view(self, request, extra_context=None):
-        extra_context = extra_context or {}
-        extra_context["custom_button_url"] = request.path.rstrip("/") + "/generate-report/"
-        extra_context["custom_button_label"] = "Сформировать отчёт"
-        return super().change_list_view(request, extra_context=extra_context)
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.created_by = request.user
+            filename = generate_report_content(obj.report_type, obj.date_from, obj.date_to)
+            obj.file.name = filename
+            obj.status = "ready"
+        super().save_model(request, obj, form, change)
 
     def created_at_formatted(self, obj):
         return formats.date_format(obj.created_at, "d F Y")
-
     created_at_formatted.short_description = "Дата"
 
     def status_display(self, obj):
         return obj.get_status_display()
-
     status_display.short_description = "Статус"
+
+    def file_download(self, obj):
+        if obj.file:
+            return mark_safe(f'<a href="{obj.file.url}" target="_blank">Скачать</a>')
+        return "—"
+
+    file_download.short_description = "Файл"
