@@ -132,7 +132,8 @@ class ProductImageInline(admin.TabularInline):
 class ProductVariantInline(admin.TabularInline):
     model = ProductVariant
     extra = 0
-    fields = ['color_name', 'color_hex', 'size', 'stock']
+    fields = ['duplicate_btn', 'color_name', 'color_hex', 'size', 'stock']
+    readonly_fields = ['duplicate_btn']
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         if db_field.name == 'size' and request.resolver_match.kwargs.get('object_id'):
@@ -157,6 +158,18 @@ class ProductVariantInline(admin.TabularInline):
 
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
+    def duplicate_btn(self, obj=None):
+        if obj:
+            return mark_safe(
+                f'<button type="button" class="duplicate-row-btn btn" '
+                f'style="padding: 4px 8px; font-size: 12px; background: #28a745; '
+                f'color: white; border: none; border-radius: 3px; cursor: pointer;" '
+                f'title="Дублировать вариант">📋</button>'
+            )
+        return ""
+
+    duplicate_btn.short_description = ''
+
 
 class ProductAdminForm(forms.ModelForm):
     material = forms.ChoiceField(label="Материал", required=True)
@@ -167,11 +180,11 @@ class ProductAdminForm(forms.ModelForm):
 
     class Media:
         css = {"all": ("admin/custom_admin.css",)}
+        js = ('admin/product_variant_duplicate.js',)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        # Подкатегории (без материалов)
         qs = SubCategory.objects.filter(is_material=False).select_related('category').order_by(
             'category__gender', 'category__order', 'order', 'name'
         )
@@ -182,7 +195,6 @@ class ProductAdminForm(forms.ModelForm):
                 choices.append((label, items))
         self.fields['subcategory'].choices = choices
 
-        # Материалы
         mat_qs = SubCategory.objects.filter(is_material=True).select_related('category').order_by(
             'category__gender', 'order', 'name'
         )
