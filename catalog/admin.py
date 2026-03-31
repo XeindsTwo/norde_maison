@@ -136,35 +136,28 @@ class ProductVariantInline(admin.TabularInline):
     readonly_fields = ['duplicate_btn']
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
-        if db_field.name == 'size' and request.resolver_match.kwargs.get('object_id'):
-            product_id = request.resolver_match.kwargs['object_id']
+        if db_field.name == 'size':
+            object_id = request.resolver_match.kwargs.get('object_id')
+            if object_id:
+                try:
+                    product_id = int(object_id)
+                    has_uni = ProductVariant.objects.filter(product_id=product_id, size='UNI').exists()
+                    has_standard = ProductVariant.objects.filter(product_id=product_id).exclude(size='UNI').exists()
 
-            has_uni = ProductVariant.objects.filter(
-                product_id=product_id,
-                size=ProductVariant.Sizes.UNI
-            ).exists()
-
-            has_standard = ProductVariant.objects.filter(
-                product_id=product_id
-            ).exclude(size=ProductVariant.Sizes.UNI).exists()
-
-            if has_uni:
-                kwargs['choices'] = [(ProductVariant.Sizes.UNI, 'UNI')]
-            elif has_standard:
-                kwargs['choices'] = [
-                    (s[0], s[1]) for s in ProductVariant.Sizes.choices
-                    if s[0] != ProductVariant.Sizes.UNI
-                ]
-
+                    if has_uni:
+                        kwargs['choices'] = [('UNI', 'UNI')]
+                    elif has_standard:
+                        kwargs['choices'] = [choice for choice in ProductVariant.Sizes.choices if choice[0] != 'UNI']
+                except (ValueError, Product.DoesNotExist):
+                    pass
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def duplicate_btn(self, obj=None):
         if obj:
             return mark_safe(
-                f'<button type="button" class="duplicate-row-btn btn" '
-                f'style="padding: 4px 8px; font-size: 12px; background: #28a745; '
-                f'color: white; border: none; border-radius: 3px; cursor: pointer;" '
-                f'title="Дублировать вариант">📋</button>'
+                f'<button type="button" class="duplicate-row-btn" '
+                f'style="padding:4px 8px;font-size:12px;background:#28a745;color:white;border:none;border-radius:3px;cursor:pointer;" '
+                f'title="Дублировать">📋</button>'
             )
         return ""
 
@@ -185,25 +178,20 @@ class ProductAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        qs = SubCategory.objects.filter(is_material=False).select_related('category').order_by(
-            'category__gender', 'category__order', 'order', 'name'
-        )
+        subcats = SubCategory.objects.filter(is_material=False).select_related('category').values(
+            'id', 'name', 'category__name', 'category__gender'
+        ).order_by('category__gender', 'category__order', 'order', 'name')
+
         choices = []
         for gender, label in [('F', 'Женские'), ('M', 'Мужские')]:
-            items = [(sc.id, f"{sc.name} — {sc.category.name}") for sc in qs.filter(category__gender=gender)]
+            items = [(item['id'], f"{item['name']} — {item['category__name']}") for item in subcats if
+                     item['category__gender'] == gender]
             if items:
                 choices.append((label, items))
         self.fields['subcategory'].choices = choices
 
-        mat_qs = SubCategory.objects.filter(is_material=True).select_related('category').order_by(
-            'category__gender', 'order', 'name'
-        )
-        mat_choices = []
-        for gender, label in [('F', 'Женские материалы'), ('M', 'Мужские материалы')]:
-            items = [(m.name, m.name) for m in mat_qs.filter(category__gender=gender)]
-            if items:
-                mat_choices.append((label, items))
-        self.fields['material'].choices = mat_choices
+        mats = SubCategory.objects.filter(is_material=True).values_list('name', flat=True).distinct().order_by('name')
+        self.fields['material'].choices = [('', '---------')] + [(mat, mat) for mat in mats]
 
 
 try:

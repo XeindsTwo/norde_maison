@@ -274,6 +274,9 @@ class ProductVariant(models.Model):
 
     def clean(self):
         super().clean()
+        if not self.product.pk:
+            return
+
         size_model = self.product.subcategory.size_model
 
         if size_model == SubCategory.SizeModel.UNI and self.size != ProductVariant.Sizes.UNI:
@@ -284,7 +287,7 @@ class ProductVariant(models.Model):
 
         if self.pk is None:
             uni_exists = ProductVariant.objects.filter(
-                product=self.product,
+                product_id=self.product.pk,
                 size=ProductVariant.Sizes.UNI
             ).exists()
             if uni_exists and self.size != ProductVariant.Sizes.UNI:
