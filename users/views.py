@@ -7,11 +7,13 @@ from rest_framework.response import Response
 from rest_framework.generics import ListAPIView
 from rest_framework import generics, permissions, status
 from django.contrib.auth.models import User
-from django.template.loader import render_to_string
-from django.core.mail import EmailMultiAlternatives
-from django.conf import settings
 from django.shortcuts import render
 from .models import EmailActivation, UserProfile, PasswordResetToken
+from .email_service import (
+    send_activation_email,
+    send_password_changed_email,
+    send_password_reset_email,
+)
 from .serializers import (
     RegisterSerializer,
     UserSerializer,
@@ -56,33 +58,7 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [permissions.AllowAny]
 
     def send_activation_email_async(self, user, activation_token):
-        """
-        Отправка email в отдельном потоке (не блокирует HTTP request).
-        """
-
-        try:
-            confirm_url = f"{settings.SITE_URL}/api/auth/confirm/{activation_token}/"
-
-            html_message = render_to_string(
-                "users/welcome_email.html",
-                {
-                    "first_name": user.first_name,
-                    "confirm_url": confirm_url
-                }
-            )
-
-            email = EmailMultiAlternatives(
-                subject="Подтверждение регистрации",
-                body="Подтвердите email",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[user.email]
-            )
-
-            email.attach_alternative(html_message, "text/html")
-            email.send(fail_silently=False)
-
-        except Exception:
-            pass
+        send_activation_email(user, activation_token)
 
     def create(self, request, *args, **kwargs):
 
@@ -282,22 +258,10 @@ class ChangePasswordView(APIView):
 
         new_token = Token.objects.create(user=user)
 
-        html_message = render_to_string(
-            "users/password_changed.html",
-            {
-                "first_name": user.first_name,
-            }
-        )
-
-        email = EmailMultiAlternatives(
-            subject="Пароль успешно изменён",
-            body="Пароль был изменён",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[user.email]
-        )
-
-        email.attach_alternative(html_message, "text/html")
-        email.send(fail_silently=True)
+        try:
+            send_password_changed_email(user)
+        except Exception:
+            pass
 
         return Response({
             "success": True,
@@ -348,23 +312,7 @@ class PasswordResetView(APIView):
     def send_reset_email_async(self, user_id, token):
         try:
             user = User.objects.get(id=user_id)
-            reset_url = f"{settings.SITE_URL_CLIENT}/?reset_token={token}"
-
-            context = {
-                "first_name": user.first_name,
-                "reset_url": reset_url,
-            }
-
-            html_body = render_to_string("users/password_reset.html", context)
-
-            email = EmailMultiAlternatives(
-                subject="Сброс пароля — Norde Maison",
-                body="Перейдите по ссылке для смены пароля.",
-                from_email=settings.DEFAULT_FROM_EMAIL,
-                to=[user.email],
-            )
-            email.attach_alternative(html_body, "text/html")
-            email.send(fail_silently=False)
+            send_password_reset_email(user, token)
 
         except Exception as e:
             import traceback

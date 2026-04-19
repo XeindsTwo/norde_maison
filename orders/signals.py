@@ -7,12 +7,11 @@ from django.db.models import F
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.urls import reverse
-from django.template.loader import render_to_string
-from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 from django.conf import settings
 from shop_config.models import TelegramConfig
 from .models import Order, OrderStatus
+from .email_service import send_order_confirmation_email, send_order_status_email
 
 
 def fmt_price(value, show_zero_as_free=False):
@@ -34,37 +33,14 @@ def get_status_emoji(status):
 
 def _send_order_email_async(order):
     try:
-        html = render_to_string("emails/order_confirmation.html", {"order": order, "first_name": order.first_name})
-        email = EmailMultiAlternatives(
-            subject=f"Заказ #{order.order_number} - Norde Maison",
-            body=f"Ваш заказ #{order.order_number} успешно оформлен!",
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[order.user.email]
-        )
-        email.attach_alternative(html, "text/html")
-        email.send(fail_silently=True)
+        send_order_confirmation_email(order)
     except:
         pass
 
 
 def _send_status_email_async(order, status):
     try:
-        if status == "in_way":
-            profile_url = f"{settings.SITE_URL_CLIENT}/profile/"
-        elif status == "delivered":
-            profile_url = f"{settings.SITE_URL_CLIENT}/"
-        elif status == "cancelled":
-            profile_url = f"{settings.SITE_URL_CLIENT}/profile/"
-        else:
-            return
-        html = render_to_string("emails/order_status_update.html",
-                                {"order": order, "status": status, "profile_url": profile_url})
-        subject = f"Заказ #{order.order_number} - {order.get_status_display()}"
-        body = f"Ваш заказ #{order.order_number} обновлён до статуса '{order.get_status_display()}'"
-        email = EmailMultiAlternatives(subject=subject, body=body, from_email=settings.DEFAULT_FROM_EMAIL,
-                                       to=[order.user.email])
-        email.attach_alternative(html, "text/html")
-        email.send(fail_silently=True)
+        send_order_status_email(order, status)
     except:
         pass
 

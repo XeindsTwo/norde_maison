@@ -1,7 +1,16 @@
-import os.path
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+env_path = BASE_DIR / ".env"
+if env_path.exists():
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 SECRET_KEY = 'django-insecure-!d)e1)+(6jd9i4=)j--cdh*@wf&dyhrq99qf(loc12uxn*)u@9'
 
@@ -178,6 +187,8 @@ MEDIA_URL = "/media/"
 YOOKASSA_SHOP_ID = "1305307"
 YOOKASSA_SECRET_KEY = "test_Gvf9reEgzw9GF_24Sn3tutuNxSX5q4ODJc9VfbWar14"
 YOOKASSA_RETURN_URL = f"{SITE_URL_CLIENT}/profile/"
+
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True

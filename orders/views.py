@@ -14,6 +14,7 @@ from .models import Order, OrderItem, OrderStatus
 from .serializers import CheckoutSerializer, OrderSerializer, OrderPreviewSerializer
 from .utils.yookassa import create_payment
 from .utils.exchange_rates import convert_to_rub
+from .signals import _send_order_email_async, _send_tg_notification_async
 from django.utils import timezone
 from datetime import timedelta
 import threading
@@ -243,6 +244,9 @@ class CheckoutView(APIView):
             item_data["variant"].save()
 
         cart.items.all().delete()
+
+        threading.Thread(target=_send_order_email_async, args=(order,), daemon=True).start()
+        threading.Thread(target=_send_tg_notification_async, args=(order,), daemon=True).start()
 
         return Response({"success": True, "order_number": order.order_number})
 
